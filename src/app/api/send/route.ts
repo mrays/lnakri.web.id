@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import ReportEmail from "@/components/emails/ReportEmail";
+import ComplaintCreatedEmail from "@/components/emails/ComplaintCreatedEmail";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -16,10 +16,16 @@ export async function POST(request: Request) {
     }
 
     const { data, error } = await resend.emails.send({
-      from: "LNAKRI <no-reply@lnakri.web.id>",
-      to: ["muhamadazizul11@gmail.com"], // Ganti dengan email tujuan
-      subject: "Laporan Baru Telah Dibuat",
-      react: ReportEmail({ reportId }),
+      from: "LNAKRI NGO <noreply@lnakri.web.id>",
+      to: ["muhamadazizul11@gmail.com"],
+      subject: `Laporan Baru Telah Dibuat - ${reportId}`,
+      react: ComplaintCreatedEmail({
+        reporterName: 'Tim Admin',
+        requestCode: reportId,
+        subject: 'Laporan baru telah dibuat',
+        type: 'keluhan',
+        createdAt: new Date().toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      }),
     });
 
     if (error) {

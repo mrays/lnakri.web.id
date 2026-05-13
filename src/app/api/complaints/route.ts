@@ -3,6 +3,7 @@ import { getMysqlPool } from '@/lib/mysql';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { buildStoredFileName, getComplaintUploadDir, getComplaintUploadUrl } from '@/lib/upload-storage';
+import { sendComplaintCreatedEmail } from '@/lib/complaint-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,6 +61,7 @@ export async function GET() {
         attachmentUrl: attachments[0]?.fileUrl || null,
         attachmentName: attachments[0]?.originalFileName || attachments[0]?.fileName || null,
         attachmentCount: attachments.length,
+        attachments,
         location: row.location,
       };
     });
@@ -163,43 +165,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // Send email using Resend if API key is configured
-    const resendApiKey = process.env.RESEND_API_KEY;
     const emailSubject = formData.get('subject') as string || 'Laporan Pengaduan';
-    
-    if (resendApiKey && resendApiKey !== 'your_resend_api_key_here' && email) {
-      try {
-        const emailHtml = `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-            <div style="text-align: center; margin-bottom: 20px;">
-              <h2 style="color: #1a3a5c; margin-top: 10px;">Laporan Pengaduan Diterima</h2>
-            </div>
-            <p>Halo <strong>${reporterName}</strong>,</p>
-            <p>Terima kasih telah melaporkan aduan Anda kepada LNAKRI NGO. Laporan Anda telah kami terima dengan detail sebagai berikut:</p>
-            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #c0392b;">
-              <p style="margin: 5px 0;"><strong>Nomor Tiket:</strong> <span style="color: #c0392b; font-weight: bold;">${requestCode}</span></p>
-              <p style="margin: 5px 0;"><strong>Subjek:</strong> ${emailSubject}</p>
-              <p style="margin: 5px 0;"><strong>Status:</strong> Diterima (Menunggu Verifikasi)</p>
-            </div>
-            <p>Anda dapat memantau status laporan Anda secara berkala di website kami menggunakan Nomor Tiket di atas.</p>
-            <p>Jika ada pertanyaan lebih lanjut, silakan hubungi kami melalui email ini atau WhatsApp di nomor resmi kami.</p>
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #777; text-align: center;">Ini adalah email otomatis, mohon tidak membalas email ini.<br />&copy; 2026 LNAKRI NGO. All rights reserved.</p>
-          </div>
-        `;
+    const createdAtLabel = new Date().toLocaleString('id-ID', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
 
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: 'LNAKRI NGO <noreply@lnakri.web.id>', // Menggunakan domain resmi user
-            to: [email],
-            subject: `[LNAKRI] Detail Laporan Anda - ${requestCode}`,
-            html: emailHtml,
-          }),
+    if (email) {
+      try {
+        await sendComplaintCreatedEmail({
+          to: email,
+            reporterName,
+            requestCode,
+            subject: emailSubject,
+            type,
+            location,
+            attachmentCount: files.filter((file) => file.size > 0).length,
+            createdAt: createdAtLabel,
         });
       } catch (emailError) {
         console.error('Failed to send email via Resend:', emailError);

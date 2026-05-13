@@ -18,6 +18,11 @@ type Complaint = {
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   attachmentCount?: number;
+  attachments?: {
+    fileUrl: string;
+    fileName: string;
+    originalFileName: string | null;
+  }[];
   location?: string;
 };
 
@@ -107,6 +112,22 @@ export default function ComplaintManagement() {
   const downloadAttachment = (complaint: Complaint) => {
     if (!complaint.attachmentUrl) return;
     window.open(complaint.attachmentUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const complaintAttachments = (complaint: Complaint) => {
+    if (complaint.attachments && complaint.attachments.length > 0) {
+      return complaint.attachments;
+    }
+
+    if (complaint.attachmentUrl) {
+      return [{
+        fileUrl: complaint.attachmentUrl,
+        fileName: complaint.attachmentName || `lampiran-${complaint.requestCode || complaint.id}`,
+        originalFileName: complaint.attachmentName || null,
+      }];
+    }
+
+    return [];
   };
 
   const statusCounts = {
@@ -291,16 +312,27 @@ export default function ComplaintManagement() {
                     <option value="selesai">Selesai</option>
                   </select>
                 </div>
-                {viewComplaint.attachmentUrl ? (
-                  <a
-                    href={viewComplaint.attachmentUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    download={viewComplaint.attachmentName || `lampiran-${viewComplaint.requestCode || viewComplaint.id}`}
-                    className="flex items-center gap-2 text-sm font-600 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    <Download size={14} /> Unduh Dokumen Bukti
-                  </a>
+                {complaintAttachments(viewComplaint).length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="text-xs text-gray-500 font-600 uppercase tracking-wide">Lampiran</div>
+                    <div className="flex flex-wrap gap-2">
+                      {complaintAttachments(viewComplaint).map((attachment, index) => (
+                        <a
+                          key={`${attachment.fileUrl}-${index}`}
+                          href={attachment.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={attachment.originalFileName || attachment.fileName}
+                          className="flex items-center gap-2 text-sm font-600 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Download size={14} />
+                          {complaintAttachments(viewComplaint).length > 1
+                            ? `Unduh Lampiran ${index + 1}`
+                            : 'Unduh Dokumen Bukti'}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 ) : viewComplaint.hasDokumen ? (
                   <button
                     type="button"
