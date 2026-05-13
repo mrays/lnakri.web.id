@@ -12,6 +12,9 @@ import JagaIntegration from './components/JagaIntegration';
 import PublicFooter from './components/PublicFooter';
 import WatermarkLogo from '@/components/WatermarkLogo';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function PublicHomepage() {
   return (
     <div className="min-h-screen bg-gray-50 watermark-bg">
