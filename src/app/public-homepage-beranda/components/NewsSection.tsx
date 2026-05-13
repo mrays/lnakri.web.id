@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 
 import AppImage from '@/components/ui/AppImage';
 import { Calendar, User, Clock, ChevronRight } from 'lucide-react';
+import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl, isYouTubeUrl } from '@/lib/news-media';
 
 const categoryColors: Record<string, string> = {
   'Investigasi': 'bg-red-100 text-red-700',
@@ -12,6 +13,45 @@ const categoryColors: Record<string, string> = {
   'Kerjasama': 'bg-purple-100 text-purple-700',
   'Laporan': 'bg-indigo-100 text-indigo-700'
 };
+
+function NewsMedia({ src, alt, fill = false, className = '', sizes, variant = 'card', width, height, priority, autoplay = false }: { src: string; alt: string; fill?: boolean; className?: string; sizes?: string; variant?: 'card' | 'embed'; width?: number; height?: number; priority?: boolean; autoplay?: boolean }) {
+  const embedUrl = getYouTubeEmbedUrl(src);
+  const thumbnailUrl = getYouTubeThumbnailUrl(src);
+
+  if (embedUrl && variant === 'embed' && autoplay) {
+    return (
+      <div className={`relative h-full w-full overflow-hidden bg-black ${className}`}>
+        <iframe
+          src={`${embedUrl}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1`}
+          title={alt}
+          className="absolute inset-0 h-full w-full"
+          allow="autoplay; encrypted-media; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  const resolvedSrc = thumbnailUrl || src;
+
+  if (fill) {
+    return <AppImage src={resolvedSrc} alt={alt} fill className={className} sizes={sizes} />;
+  }
+
+  return <AppImage src={resolvedSrc} alt={alt} className={className} sizes={sizes} width={width} height={height} priority={priority} />;
+}
+
+function VideoBadge() {
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600/95 text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-4 ring-white/80 backdrop-blur-sm">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 export default function NewsSection() {
   const [newsList, setNewsList] = useState<any[]>([]);
@@ -66,8 +106,9 @@ export default function NewsSection() {
               {featuredNews && (
                 <div className="lg:col-span-2 group cursor-pointer" onClick={() => setSelectedNews(featuredNews)}>
                   <div className="rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white border border-gray-100">
-                    <div className="relative h-64 lg:h-80 overflow-hidden">
-                      <AppImage
+                    <div className="relative">
+                      <div className="relative h-64 lg:h-80 overflow-hidden rounded-t-2xl">
+                      <NewsMedia
                         src={featuredNews.image}
                         alt={featuredNews.imageAlt}
                         fill
@@ -78,6 +119,7 @@ export default function NewsSection() {
                       <span className={`absolute top-4 left-4 text-xs font-700 px-2.5 py-1 rounded-full ${categoryColors[featuredNews.category] || 'bg-gray-100 text-gray-700'}`}>
                         {featuredNews.category}
                       </span>
+                      {isYouTubeUrl(featuredNews.image) && <VideoBadge />}
                       <div className="absolute bottom-4 left-4 right-4">
                         <h3 className="text-white font-700 text-xl leading-snug line-clamp-2 hover:underline cursor-pointer">
                           {featuredNews.title}
@@ -87,6 +129,7 @@ export default function NewsSection() {
                           <span className="flex items-center gap-1"><Calendar size={12} />{featuredNews.date}</span>
                           <span className="flex items-center gap-1"><Clock size={12} />{featuredNews.time}</span>
                         </div>
+                      </div>
                       </div>
                     </div>
                     <div className="p-5">
@@ -104,14 +147,14 @@ export default function NewsSection() {
                 {sideNews.map((news) =>
                 <div key={news.id} onClick={() => setSelectedNews(news)}
                 className="flex gap-4 p-4 rounded-xl border border-gray-100 hover:border-red-200 hover:bg-red-50/30 cursor-pointer transition-all duration-200 group">
-                    <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden">
-                      <AppImage
+                    <div className="relative flex-shrink-0 w-20 h-20 overflow-hidden rounded-lg">
+                      <NewsMedia
                       src={news.image}
                       alt={news.imageAlt}
                       width={80}
                       height={80}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    
+                      {isYouTubeUrl(news.image) && <VideoBadge />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className={`text-xs font-600 px-2 py-0.5 rounded-full ${categoryColors[news.category] || 'bg-gray-100 text-gray-700'}`}>
@@ -134,8 +177,9 @@ export default function NewsSection() {
               {bottomNews.map((news) =>
               <div key={news.id} onClick={() => setSelectedNews(news)}
               className="rounded-xl overflow-hidden border border-gray-100 hover:shadow-md cursor-pointer transition-all duration-200 group bg-white">
-                  <div className="relative h-44 overflow-hidden">
-                    <AppImage
+                  <div className="relative">
+                    <div className="relative h-44 overflow-hidden rounded-t-xl">
+                    <NewsMedia
                     src={news.image}
                     alt={news.imageAlt}
                     fill
@@ -145,6 +189,8 @@ export default function NewsSection() {
                     <span className={`absolute top-3 left-3 text-xs font-700 px-2 py-0.5 rounded-full ${categoryColors[news.category] || 'bg-gray-100 text-gray-700'}`}>
                       {news.category}
                     </span>
+                    {isYouTubeUrl(news.image) && <VideoBadge />}
+                    </div>
                   </div>
                   <div className="p-4">
                     <h4 className="font-700 text-[#1a3a5c] text-sm leading-snug line-clamp-2 group-hover:text-red-700 transition-colors">
@@ -166,17 +212,20 @@ export default function NewsSection() {
       {/* News Detail Modal */}
       {selectedNews &&
       <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto animate-fade-in" onClick={() => setSelectedNews(null)}>
-          <div className="bg-white rounded-2xl max-w-3xl w-full mt-8 mb-8 shadow-2xl overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <div className="relative h-64">
-              <AppImage
+          <div className="bg-white rounded-2xl max-w-4xl w-full mt-8 mb-8 shadow-2xl overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="relative h-[180px] sm:h-[220px] lg:h-[280px]">
+              <NewsMedia
               src={selectedNews.image}
               alt={selectedNews.imageAlt}
               fill
               className="object-cover"
               sizes="100vw"
-              priority />
+              variant="embed"
+              autoplay />
             
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              {!isYouTubeUrl(selectedNews.image) && (
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+              )}
               <button onClick={() => setSelectedNews(null)}
             className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors">
                 ✕
@@ -185,17 +234,19 @@ export default function NewsSection() {
                 {selectedNews.category}
               </span>
             </div>
-            <div className="p-6 lg:p-8">
-              <h2 className="text-xl lg:text-2xl font-800 text-[#1a3a5c] leading-tight mb-4">{selectedNews.title}</h2>
+            <div className="px-6 py-7 sm:px-8 lg:px-10 lg:py-9">
+              <div className="mx-auto max-w-2xl">
+                <h2 className="text-xl lg:text-2xl font-800 text-[#1a3a5c] leading-tight mb-4 break-words">{selectedNews.title}</h2>
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 pb-4 border-b border-gray-100 mb-5">
                 <span className="flex items-center gap-1.5"><User size={14} className="text-red-700" />{selectedNews.author}</span>
                 <span className="flex items-center gap-1.5"><Calendar size={14} className="text-red-700" />{selectedNews.date}</span>
                 <span className="flex items-center gap-1.5"><Clock size={14} className="text-red-700" />{selectedNews.time}</span>
               </div>
-              <p className="text-gray-700 leading-relaxed text-base">{selectedNews.excerpt}</p>
-              <p className="text-gray-700 leading-relaxed text-base mt-4">{selectedNews.content}</p>
+              <p className="text-gray-700 leading-relaxed text-base break-words whitespace-pre-wrap">{selectedNews.excerpt}</p>
+              <p className="text-gray-700 leading-relaxed text-base mt-4 break-words whitespace-pre-wrap">{selectedNews.content}</p>
               <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
                 <button onClick={() => setSelectedNews(null)} className="btn-primary text-sm">Tutup</button>
+              </div>
               </div>
             </div>
           </div>

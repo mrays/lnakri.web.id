@@ -86,14 +86,15 @@ export default function OrgProfile() {
 
           {/* Logo Side */}
           <div className="flex flex-col items-center justify-center">
-            <div className="relative w-64 h-64 lg:w-80 lg:h-80">
+            <div className="relative w-full max-w-[420px] aspect-square">
               <div className="absolute inset-0 bg-gradient-to-br from-[#1a3a5c]/10 to-red-100 rounded-full" />
               <AppImage
                 src="/assets/images/a21354667_lnakrilogo-1776577431349.png"
                 alt={`Logo resmi ${profile.name}`}
                 fill
-                className="object-contain p-8"
+                className="p-8"
                 sizes="320px"
+                objectFit="contain"
                 priority
               />
             </div>

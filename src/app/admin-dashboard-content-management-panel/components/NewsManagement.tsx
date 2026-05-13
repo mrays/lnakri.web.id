@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import AppImage from '@/components/ui/AppImage';
-import { Plus, Edit2, Trash2, Eye, X, Upload, Save, Search, Calendar, User } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, X, Save, Search, Calendar, User, Video, Image as ImageIcon, Play } from 'lucide-react';
+import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl, isYouTubeUrl, isLikelyImageUrl } from '@/lib/news-media';
 
 type NewsItem = {
   id: string;
@@ -28,6 +29,42 @@ type NewsForm = {
   status: 'published' | 'draft';
 };
 
+function NewsMediaView({ src, alt, className = '', fill = false, sizes, variant = 'card' }: { src: string; alt: string; className?: string; fill?: boolean; sizes?: string; variant?: 'card' | 'embed' }) {
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(src);
+  const youtubeThumbnailUrl = getYouTubeThumbnailUrl(src);
+
+  if (youtubeEmbedUrl && variant === 'embed') {
+    return (
+      <div className={`relative h-full w-full overflow-hidden bg-black ${className}`}>
+        <AppImage
+          src={youtubeThumbnailUrl || src}
+          alt={alt}
+          fill
+          className="object-cover"
+          sizes={sizes}
+        />
+        <div className="absolute inset-0 bg-black/25" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600/95 shadow-lg">
+            <Play size={28} className="ml-1 text-white" />
+          </div>
+        </div>
+        <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-xs font-700 text-[#1a3a5c]">
+          Video YouTube
+        </span>
+      </div>
+    );
+  }
+
+  const resolvedSrc = youtubeThumbnailUrl || src;
+
+  if (fill) {
+    return <AppImage src={resolvedSrc} alt={alt} fill className={className} sizes={sizes} />;
+  }
+
+  return <AppImage src={resolvedSrc} alt={alt} className={className} sizes={sizes} />;
+}
+
 const initialNews: NewsItem[] = [
 { id: 'news-admin-001', title: 'LNAKRI Ungkap Dugaan Korupsi Dana Desa Senilai Rp 2,3 Miliar di Kalimantan Timur', content: 'Tim investigasi LNAKRI NGO berhasil mengumpulkan bukti-bukti dugaan penyalahgunaan dana desa di tiga kecamatan di Kabupaten Kutai Kartanegara. Temuan ini telah dilaporkan kepada KPK dan Kejaksaan Negeri setempat. Proses penyelidikan masih berlangsung dan LNAKRI terus memantau perkembangan kasus ini.', excerpt: 'Tim investigasi LNAKRI NGO berhasil mengumpulkan bukti dugaan penyalahgunaan dana desa.', author: 'Redaksi LNAKRI', category: 'Investigasi', status: 'published', date: '19 April 2026', time: '08:30 WIB', image: "https://images.unsplash.com/photo-1719838687113-0afb71e6b961", imageAlt: 'Gedung pengadilan Indonesia dengan latar belakang merah putih', views: 1247 },
 { id: 'news-admin-002', title: 'Penyimpangan Program MBG Ditemukan di 5 Kabupaten', content: 'LNAKRI NGO menerima lebih dari 120 laporan terkait penyimpangan program Makan Bergizi Gratis (MBG) di berbagai daerah. Ketidaksesuaian antara anggaran dan realisasi mencapai 40 persen.', excerpt: 'Lebih dari 120 laporan diterima terkait penyimpangan MBG di berbagai daerah.', author: 'Tim Investigasi LNAKRI', category: 'Pemantauan MBG', status: 'published', date: '18 April 2026', time: '14:15 WIB', image: "https://img.rocket.new/generatedImages/rocket_gen_img_15a32aa64-1764666626124.png", imageAlt: 'Program makan bergizi gratis untuk anak sekolah Indonesia', views: 892 },
@@ -44,8 +81,9 @@ export default function NewsManagement() {
   const [editingNews, setEditingNews] = useState<NewsItem | null>(null);
   const [previewNews, setPreviewNews] = useState<NewsItem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [mediaUrl, setMediaUrl] = useState<string>('');
+  const [mediaType, setMediaType] = useState<'image' | 'video'>('video');
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -76,15 +114,17 @@ export default function NewsManagement() {
 
   const openCreate = () => {
     setEditingNews(null);
+    setMediaUrl('');
+    setMediaType('video');
     setImageFile(null);
-    setImagePreviewUrl('');
     reset({ title: '', content: '', author: 'Redaksi LNAKRI', category: 'Investigasi', status: 'published' });
     setShowForm(true);
   };
 
   const openEdit = (news: NewsItem) => {
     setEditingNews(news);
-    setImagePreviewUrl(news.image);
+    setMediaUrl(news.image);
+    setMediaType(isYouTubeUrl(news.image) ? 'video' : 'image');
     setImageFile(null);
     setValue('title', news.title);
     setValue('content', news.content);
@@ -96,45 +136,88 @@ export default function NewsManagement() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const url = URL.createObjectURL(file);
-      setImagePreviewUrl(url);
-    }
+    if (!file) return;
+
+    setImageFile(file);
+    setMediaUrl(URL.createObjectURL(file));
   };
 
   const onSubmit = async (data: NewsForm) => {
     setSaving(true);
-    
-    let imageUrl = imagePreviewUrl;
 
-    if (imageFile) {
-      const formData = new FormData();
-      formData.append('file', imageFile);
-      try {
-        const uploadRes = await fetch('/api/uploads/news-image', {
-          method: 'POST',
-          body: formData,
-        });
-        const uploadData = await uploadRes.json();
-        if (uploadRes.ok) {
-          imageUrl = uploadData.url;
-        } else {
-          toast.error(uploadData.message || 'Gagal upload gambar');
-          setSaving(false);
-          return;
-        }
-      } catch (error) {
-        toast.error('Gagal upload gambar');
+    const media = mediaUrl.trim();
+    let finalMediaUrl = media;
+    let finalImageAlt = mediaType === 'video' ? `Video berita ${data.title}` : `Gambar berita ${data.title}`;
+
+    if (mediaType === 'video') {
+      if (!media) {
+        toast.error('Link YouTube wajib diisi.');
         setSaving(false);
         return;
       }
+
+      if (!isYouTubeUrl(media)) {
+        toast.error('Masukkan link YouTube yang valid.');
+        setSaving(false);
+        return;
+      }
+    } else {
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('file', imageFile);
+
+        try {
+          const uploadRes = await fetch('/api/uploads/news-image', {
+            method: 'POST',
+            body: formData,
+          });
+          const uploadData = await uploadRes.json();
+
+          if (!uploadRes.ok) {
+            toast.error(uploadData.message || 'Gagal upload gambar');
+            setSaving(false);
+            return;
+          }
+
+          finalMediaUrl = uploadData.url;
+        } catch (error) {
+          toast.error('Gagal upload gambar');
+          setSaving(false);
+          return;
+        }
+      } else if (!editingNews) {
+        toast.error('Gambar wajib diupload.');
+        setSaving(false);
+        return;
+      }
+
+      if (!finalMediaUrl) {
+        toast.error('Gambar tidak valid.');
+        setSaving(false);
+        return;
+      }
+
+      if (!isLikelyImageUrl(finalMediaUrl)) {
+        toast.error('Masukkan gambar yang valid.');
+        setSaving(false);
+        return;
+      }
+
+      if (editingNews && !imageFile) {
+        finalMediaUrl = editingNews.image;
+      }
+    }
+
+    if (mediaType === 'video' && !isYouTubeUrl(media)) {
+      toast.error('Masukkan link YouTube yang valid.');
+      setSaving(false);
+      return;
     }
 
     const payload = {
       ...data,
-      image: imageUrl,
-      imageAlt: `Gambar berita ${data.title}`,
+      image: finalMediaUrl,
+      imageAlt: finalImageAlt,
     };
 
     try {
@@ -156,6 +239,9 @@ export default function NewsManagement() {
         }
         setShowForm(false);
         reset();
+        setMediaUrl('');
+        setMediaType('video');
+        setImageFile(null);
       } else {
         toast.error(resData.message || 'Gagal menyimpan berita');
       }
@@ -296,7 +382,7 @@ export default function NewsManagement() {
         ) : filtered.length === 0 ? (
           <div className="col-span-full text-center py-10 text-gray-500">Belum ada berita.</div>
         ) : (
-          filtered.map((news) => (
+              filtered.map((news) => (
             <div key={news.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-all duration-200 group">
               <div className="relative h-40 overflow-hidden">
                 <div className="absolute top-2 left-2 z-10 bg-white/90 rounded-md px-1.5 py-1">
@@ -307,7 +393,7 @@ export default function NewsManagement() {
                     aria-label={`Pilih berita ${news.title}`}
                   />
                 </div>
-                <AppImage
+                <NewsMediaView
                 src={news.image}
                 alt={news.imageAlt}
                 fill
@@ -363,32 +449,90 @@ export default function NewsManagement() {
             <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
               {/* Image Upload */}
               <div>
-                <label className="label">Gambar Berita <span className="text-red-500">*</span></label>
-                <p className="text-xs text-gray-500 mb-2">Upload gambar untuk ditampilkan bersama berita (JPG, PNG, maks 5MB)</p>
-                <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden hover:border-red-400 transition-colors">
-                  {imagePreviewUrl ?
-                <div className="relative">
+                <label className="label">Media Berita <span className="text-red-500">*</span></label>
+                <p className="text-xs text-gray-500 mb-3">Pilih gambar atau video. Gambar bisa diupload, video hanya pakai URL YouTube.</p>
+                <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMediaType('image');
+                      setMediaUrl('');
+                      setImageFile(null);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-600 transition-colors ${mediaType === 'image' ? 'bg-[#1a3a5c] text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    <ImageIcon size={14} />
+                    Gambar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMediaType('video');
+                      setMediaUrl('');
+                      setImageFile(null);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-600 transition-colors border-l border-gray-200 ${mediaType === 'video' ? 'bg-[#1a3a5c] text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    <Video size={14} />
+                    Video
+                  </button>
+                </div>
+                {mediaType === 'image' ? (
+                  <label className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 cursor-pointer hover:border-red-400 transition-colors">
+                    <ImageIcon size={28} className="text-gray-400" />
+                    <span className="text-sm font-600 text-gray-600">Klik untuk upload gambar berita</span>
+                    <span className="text-xs text-gray-400">JPG, PNG, WEBP (maks. 5MB)</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".jpg,.jpeg,.png,.webp"
+                      onChange={handleImageChange}
+                    />
+                  </label>
+                ) : (
+                  <input
+                    value={mediaUrl}
+                    onChange={(e) => setMediaUrl(e.target.value)}
+                    className="input-field"
+                    placeholder="Contoh: https://www.youtube.com/watch?v=..."
+                  />
+                )}
+                <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+                  {mediaType === 'video' ? (
+                    mediaUrl ? (
+                      <div className="relative aspect-video bg-black">
+                        <iframe
+                          src={getYouTubeEmbedUrl(mediaUrl) || undefined}
+                          title="Preview video berita"
+                          className="absolute inset-0 h-full w-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 px-4 py-5 text-sm text-gray-500">
+                        <Video size={16} />
+                        Preview video akan muncul di sini.
+                      </div>
+                    )
+                  ) : (
+                    imageFile || (editingNews && editingNews.image && !isYouTubeUrl(editingNews.image)) ? (
                       <AppImage
-                    src={imagePreviewUrl}
-                    alt="Preview gambar berita yang akan diupload"
-                    width={700}
-                    height={250}
-                    className="w-full h-48 object-cover"
-                    unoptimized={imagePreviewUrl.startsWith('blob:')} />
-                  
-                      <button type="button" onClick={() => {setImageFile(null);setImagePreviewUrl('');}}
-                  className="absolute top-2 right-2 w-7 h-7 bg-red-600 text-white rounded-full flex items-center justify-center hover:bg-red-700 transition-colors">
-                        <X size={14} />
-                      </button>
-                    </div> :
-
-                <label className="flex flex-col items-center gap-2 py-8 cursor-pointer">
-                      <Upload size={28} className="text-gray-400" />
-                      <span className="text-sm text-gray-500 font-600">Klik untuk upload gambar berita</span>
-                      <span className="text-xs text-gray-400">JPG, PNG (maks. 5MB)</span>
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png" onChange={handleImageChange} />
-                    </label>
-                }
+                        src={mediaUrl || editingNews?.image || ''}
+                        alt="Preview gambar berita"
+                        width={700}
+                        height={250}
+                        className="w-full h-48 object-cover"
+                        unoptimized={(mediaUrl || editingNews?.image || '').startsWith('http') || (mediaUrl || editingNews?.image || '').startsWith('blob:')}
+                      />
+                    ) : (
+                      <label className="flex flex-col items-center justify-center gap-2 py-8 text-gray-500 cursor-pointer">
+                        <ImageIcon size={28} className="text-gray-400" />
+                        <span className="text-sm font-600">Preview gambar akan muncul di sini</span>
+                        <span className="text-xs">Upload file gambar untuk menampilkan media.</span>
+                      </label>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -452,20 +596,25 @@ export default function NewsManagement() {
       {/* Preview Modal */}
       {previewNews &&
       <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 overflow-y-auto animate-fade-in" onClick={() => setPreviewNews(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full mt-6 mb-6 overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
-            <div className="relative h-56">
-              <AppImage src={previewNews.image} alt={previewNews.imageAlt} fill className="object-cover" sizes="100vw" />
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mt-6 mb-6 overflow-hidden animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="relative h-[180px] sm:h-[220px] lg:h-[280px]">
+              <NewsMediaView src={previewNews.image} alt={previewNews.imageAlt} fill className="object-cover" sizes="100vw" variant="embed" />
+              {!isYouTubeUrl(previewNews.image) && (
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+              )}
               <button onClick={() => setPreviewNews(null)} className="absolute top-3 right-3 bg-white/20 hover:bg-white/40 text-white w-8 h-8 rounded-full flex items-center justify-center">✕</button>
             </div>
-            <div className="p-6">
-              <span className="text-xs font-700 text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{previewNews.category}</span>
-              <h2 className="text-xl font-800 text-[#1a3a5c] mt-3 mb-3">{previewNews.title}</h2>
-              <div className="flex items-center gap-4 text-sm text-gray-500 pb-3 border-b border-gray-100 mb-4">
+            <div className="px-6 py-7 sm:px-8 lg:px-10 lg:py-8">
+              <div className="mx-auto max-w-2xl">
+                <span className="text-xs font-700 text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{previewNews.category}</span>
+              <h2 className="text-xl font-800 text-[#1a3a5c] mt-3 mb-3 break-words">{previewNews.title}</h2>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 pb-3 border-b border-gray-100 mb-4">
                 <span className="flex items-center gap-1"><User size={13} />{previewNews.author}</span>
                 <span className="flex items-center gap-1"><Calendar size={13} />{previewNews.date}</span>
                 <span>{previewNews.time}</span>
               </div>
-              <p className="text-gray-700 leading-relaxed text-sm">{previewNews.content}</p>
+              <p className="text-gray-700 leading-relaxed text-sm break-words whitespace-pre-wrap">{previewNews.content}</p>
+              </div>
             </div>
           </div>
         </div>
