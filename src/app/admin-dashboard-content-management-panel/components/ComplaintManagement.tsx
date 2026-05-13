@@ -15,6 +15,9 @@ type Complaint = {
   time: string;
   type: 'keluhan' | 'mbg' | 'bantuan_hukum';
   hasDokumen: boolean;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentCount?: number;
   location?: string;
 };
 
@@ -100,6 +103,11 @@ export default function ComplaintManagement() {
     const matchType = filterType === 'all' || c.type === filterType;
     return matchSearch && matchStatus && matchType;
   });
+
+  const downloadAttachment = (complaint: Complaint) => {
+    if (!complaint.attachmentUrl) return;
+    window.open(complaint.attachmentUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const statusCounts = {
     all: complaints.length,
@@ -283,11 +291,27 @@ export default function ComplaintManagement() {
                     <option value="selesai">Selesai</option>
                   </select>
                 </div>
-                {viewComplaint.hasDokumen && (
-                  <button className="flex items-center gap-2 text-sm font-600 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+                {viewComplaint.attachmentUrl ? (
+                  <a
+                    href={viewComplaint.attachmentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={viewComplaint.attachmentName || `lampiran-${viewComplaint.requestCode || viewComplaint.id}`}
+                    className="flex items-center gap-2 text-sm font-600 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                  >
                     <Download size={14} /> Unduh Dokumen Bukti
+                  </a>
+                ) : viewComplaint.hasDokumen ? (
+                  <button
+                    type="button"
+                    onClick={() => downloadAttachment(viewComplaint)}
+                    disabled={!viewComplaint.attachmentUrl}
+                    className="flex items-center gap-2 text-sm font-600 text-gray-400 px-3 py-1.5 rounded-lg cursor-not-allowed"
+                    title="Lampiran belum tersedia untuk diunduh"
+                  >
+                    <Download size={14} /> Dokumen tersedia
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

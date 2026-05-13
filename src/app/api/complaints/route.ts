@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { getMysqlPool } from '@/lib/mysql';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { buildStoredFileName, getComplaintUploadDir, getComplaintUploadUrl } from '@/lib/upload-storage';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -15,20 +17,52 @@ export async function GET() {
        ORDER BY c.created_at DESC`
     );
 
-    const complaints = (rows as any[]).map((row) => ({
-      id: String(row.id),
-      requestCode: row.request_code,
-      reporterName: row.reporter_name,
-      email: row.email,
-      subject: row.subject,
-      kronologis: row.description,
-      status: row.status,
-      date: new Date(row.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-      time: new Date(row.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
-      type: row.request_type,
-      hasDokumen: Boolean(row.has_dokumen),
-      location: row.location,
-    }));
+    const complaintRows = rows as any[];
+    const complaintIds = complaintRows.map((row) => row.id);
+    const attachmentsByCaseId = new Map<number, { fileUrl: string; fileName: string; originalFileName: string | null }[]>();
+
+    if (complaintIds.length > 0) {
+      const placeholders = complaintIds.map(() => '?').join(', ');
+      const [attachmentRows] = await pool.query(
+        `SELECT case_request_id, file_url, file_name, original_file_name
+         FROM case_request_attachments
+         WHERE case_request_id IN (${placeholders})
+         ORDER BY created_at ASC`,
+        complaintIds
+      );
+
+      for (const attachment of attachmentRows as any[]) {
+        const existing = attachmentsByCaseId.get(attachment.case_request_id) || [];
+        existing.push({
+          fileUrl: attachment.file_url,
+          fileName: attachment.file_name,
+          originalFileName: attachment.original_file_name,
+        });
+        attachmentsByCaseId.set(attachment.case_request_id, existing);
+      }
+    }
+
+    const complaints = complaintRows.map((row) => {
+      const attachments = attachmentsByCaseId.get(row.id) || [];
+
+      return {
+        id: String(row.id),
+        requestCode: row.request_code,
+        reporterName: row.reporter_name,
+        email: row.email,
+        subject: row.subject,
+        kronologis: row.description,
+        status: row.status,
+        date: new Date(row.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+        time: new Date(row.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+        type: row.request_type,
+        hasDokumen: attachments.length > 0 || Boolean(row.has_dokumen),
+        attachmentUrl: attachments[0]?.fileUrl || null,
+        attachmentName: attachments[0]?.originalFileName || attachments[0]?.fileName || null,
+        attachmentCount: attachments.length,
+        location: row.location,
+      };
+    });
 
     return NextResponse.json({ complaints });
   } catch (error) {
@@ -87,37 +121,45 @@ export async function POST(request: Request) {
     const files = formData.getAll('files') as File[];
     
     if (files.length > 0) {
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'cases', requestCode);
-      await mkdir(uploadDir, { recursive: true });
+      const uploadDir = getComplaintUploadDir(requestCode);
 
-      for (const file of files) {
-        if (file.size === 0) continue;
+      try {
+        await mkdir(uploadDir, { recursive: true });
 
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-        const filePath = path.join(uploadDir, fileName);
-        
-        await writeFile(filePath, buffer);
+        for (const file of files) {
+          if (file.size === 0) continue;
 
-        const fileUrl = `/uploads/cases/${requestCode}/${fileName}`;
+          try {
+            const buffer = Buffer.from(await file.arrayBuffer());
+            const fileName = buildStoredFileName(file.name);
+            const filePath = path.join(uploadDir, fileName);
 
-        // Insert into case_request_attachments
-        await pool.query(
-          `INSERT INTO case_request_attachments (
-            case_request_id, file_name, original_file_name, file_url, 
-            mime_type, file_size_bytes, storage_driver, uploaded_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            caseRequestId,
-            fileName,
-            file.name,
-            fileUrl,
-            file.type,
-            file.size,
-            'local',
-            'user'
-          ]
-        );
+            await writeFile(filePath, buffer);
+
+            const fileUrl = getComplaintUploadUrl(requestCode, fileName);
+
+            await pool.query(
+              `INSERT INTO case_request_attachments (
+                case_request_id, file_name, original_file_name, file_url, 
+                mime_type, file_size_bytes, storage_driver, uploaded_by
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                caseRequestId,
+                fileName,
+                file.name,
+                fileUrl,
+                file.type,
+                file.size,
+                'ephemeral',
+                'user'
+              ]
+            );
+          } catch (attachmentError) {
+            console.error('Failed to save complaint attachment:', attachmentError);
+          }
+        }
+      } catch (uploadError) {
+        console.error('Failed to prepare complaint upload directory:', uploadError);
       }
     }
 
