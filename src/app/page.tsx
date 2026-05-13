@@ -1,0 +1,1 @@
+export { default } from './public-homepage-beranda/page';
