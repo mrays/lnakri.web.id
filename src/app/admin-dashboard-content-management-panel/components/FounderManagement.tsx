@@ -17,11 +17,6 @@ type Founder = {
 
 type FounderForm = {name: string;jabatan: string;sk: string;desc: string;};
 
-const initialFounders: Founder[] = [
-{ id: 'founder-admin-001', name: 'Roddy Maruli Mazmur', jabatan: 'Ketua Umum / Pendiri', sk: 'SK No. 001/LNAKRI/I/2017', desc: 'Pendiri dan Ketua Umum LNAKRI NGO sejak 17 Januari 2017.', photo: "https://img.rocket.new/generatedImages/rocket_gen_img_1ad307cff-1776578694599.png", photoAlt: 'Pria profesional berjas sebagai pendiri dan ketua umum LNAKRI NGO' },
-{ id: 'founder-admin-002', name: 'Siti Rahayu Wulandari', jabatan: 'Sekretaris Jenderal', sk: 'SK No. 002/LNAKRI/I/2017', desc: 'Sekretaris Jenderal LNAKRI NGO dengan keahlian hukum tata negara.', photo: "https://img.rocket.new/generatedImages/rocket_gen_img_18a539b82-1776578694313.png", photoAlt: 'Wanita profesional sebagai sekretaris jenderal NGO anti korupsi' },
-{ id: 'founder-admin-003', name: 'Budi Santoso Harianto', jabatan: 'Bendahara Umum', sk: 'SK No. 003/LNAKRI/I/2017', desc: 'Bendahara Umum LNAKRI NGO, akuntan publik bersertifikat.', photo: "https://img.rocket.new/generatedImages/rocket_gen_img_16d4c4207-1776578693317.png", photoAlt: 'Pria profesional berbaju batik sebagai bendahara umum organisasi' }];
-
 
 export default function FounderManagement() {
   const [founders, setFounders] = useState<Founder[]>([]);
@@ -45,10 +40,12 @@ export default function FounderManagement() {
       const json = await response.json();
       if (Array.isArray(json.founders)) {
         setFounders(json.founders);
+      } else {
+        setFounders([]);
       }
     } catch {
-      setFounders(initialFounders);
-      toast.error('Data pendiri belum tersambung ke server, menampilkan data lokal.');
+      setFounders([]);
+      toast.error('Data pendiri belum tersambung ke server.');
     } finally {
       setIsLoadingFounders(false);
     }
