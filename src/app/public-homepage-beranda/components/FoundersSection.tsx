@@ -1,47 +1,39 @@
 import React from 'react';
 import AppImage from '@/components/ui/AppImage';
 import { FileText } from 'lucide-react';
+import { getMysqlPool } from '@/lib/mysql';
+import { unstable_noStore as noStore } from 'next/cache';
 
-const founders = [
-{
-  id: 'founder-001',
-  name: 'Roddy Maruli Mazmur',
-  jabatan: 'Ketua Umum / Pendiri',
-  sk: 'SK No. 001/LNAKRI/I/2017',
-  desc: 'Pendiri dan Ketua Umum LNAKRI NGO sejak 17 Januari 2017. Berpengalaman lebih dari 15 tahun di bidang hukum dan advokasi anti korupsi di Indonesia.',
-  photo: "https://img.rocket.new/generatedImages/rocket_gen_img_14081b9b5-1776578693341.png",
-  photoAlt: 'Pria profesional berjas formal tersenyum sebagai pendiri organisasi anti korupsi'
-},
-{
-  id: 'founder-002',
-  name: 'Siti Rahayu Wulandari',
-  jabatan: 'Sekretaris Jenderal',
-  sk: 'SK No. 002/LNAKRI/I/2017',
-  desc: 'Sekretaris Jenderal LNAKRI NGO. Ahli hukum tata negara dengan pengalaman di Lembaga Perlindungan Saksi dan Korban (LPSK).',
-  photo: "https://img.rocket.new/generatedImages/rocket_gen_img_1925f5c93-1772982264890.png",
-  photoAlt: 'Wanita profesional berpakaian resmi sebagai sekretaris jenderal lembaga NGO'
-},
-{
-  id: 'founder-003',
-  name: 'Budi Santoso Harianto',
-  jabatan: 'Bendahara Umum',
-  sk: 'SK No. 003/LNAKRI/I/2017',
-  desc: 'Bendahara Umum LNAKRI NGO. Akuntan publik bersertifikat dengan spesialisasi audit keuangan lembaga publik dan NGO.',
-  photo: "https://img.rocket.new/generatedImages/rocket_gen_img_14e653504-1776578693620.png",
-  photoAlt: 'Pria profesional berbaju batik sebagai bendahara umum organisasi kemasyarakatan'
-},
-{
-  id: 'founder-004',
-  name: 'Dr. Margaretha Simanungkalit',
-  jabatan: 'Ketua Divisi Hukum',
-  sk: 'SK No. 004/LNAKRI/I/2017',
-  desc: 'Ketua Divisi Hukum LNAKRI NGO. Doktor Ilmu Hukum dari Universitas Indonesia dengan fokus penelitian hukum pidana korupsi.',
-  photo: "https://img.rocket.new/generatedImages/rocket_gen_img_1c92163fd-1763294586994.png",
-  photoAlt: 'Wanita akademisi berpakaian profesional sebagai ketua divisi hukum anti korupsi'
-}];
+type FounderRow = {
+  id: number;
+  full_name: string;
+  position_title: string;
+  decree_number: string;
+  description: string;
+  photo_url: string;
+  photo_alt?: string;
+};
 
+export default async function FoundersSection() {
+  noStore();
+  const pool = getMysqlPool();
+  const [rows] = await pool.query(
+    `SELECT id, full_name, position_title, decree_number, description, photo_url, photo_alt
+     FROM founders
+     WHERE is_active = 1
+     ORDER BY sort_order ASC, id ASC`
+  );
 
-export default function FoundersSection() {
+  const founders = (rows as FounderRow[]).map((row) => ({
+    id: String(row.id),
+    name: row.full_name,
+    jabatan: row.position_title,
+    sk: row.decree_number,
+    desc: row.description,
+    photo: row.photo_url,
+    photoAlt: row.photo_alt || `Foto ${row.position_title} ${row.full_name} LNAKRI NGO`,
+  }));
+
   return (
     <section id="pendiri" className="py-16 bg-gray-50">
       <div className="max-w-screen-2xl mx-auto px-4 lg:px-8">
