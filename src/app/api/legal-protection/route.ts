@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMysqlPool } from '@/lib/mysql';
-import { sendComplaintCreatedEmail } from '@/lib/complaint-email';
+import { sendComplaintCreatedEmail, sendInternalNotificationEmail } from '@/lib/complaint-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -84,7 +84,18 @@ export async function POST(request: Request) {
         createdAt: createdAtLabel,
       });
     } catch (emailError) {
-      console.error('Failed to send legal protection email via Resend:', emailError);
+      console.error('Failed to send legal protection reporter email via Resend:', emailError);
+    }
+
+    try {
+      await sendInternalNotificationEmail({
+        reportId: requestCode,
+        reportType: 'perlindungan',
+        reporterName: fullName,
+        subject: 'Draft Permohonan Perlindungan Hukum Saksi',
+      });
+    } catch (emailError) {
+      console.error('Failed to send legal protection organization email via Resend:', emailError);
     }
 
     return NextResponse.json({

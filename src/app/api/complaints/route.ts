@@ -3,7 +3,7 @@ import { getMysqlPool } from '@/lib/mysql';
 import path from 'path';
 import { buildStoredFileName, getComplaintUploadUrl } from '@/lib/upload-storage';
 import { uploadToR2, getPublicUrl } from '@/lib/r2-storage';
-import { sendComplaintCreatedEmail } from '@/lib/complaint-email';
+import { sendComplaintCreatedEmail, sendInternalNotificationEmail } from '@/lib/complaint-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -197,18 +197,28 @@ export async function POST(request: Request) {
       try {
         await sendComplaintCreatedEmail({
           to: email,
-            reporterName,
-            requestCode,
-            subject: emailSubject,
-            type,
-            location,
-            attachmentCount: files.filter((file) => file.size > 0).length,
-            createdAt: createdAtLabel,
+          reporterName,
+          requestCode,
+          subject: emailSubject,
+          type,
+          location,
+          attachmentCount: files.filter((file) => file.size > 0).length,
+          createdAt: createdAtLabel,
         });
       } catch (emailError) {
-        console.error('Failed to send email via Resend:', emailError);
-        // Kita tidak menggagalkan response utama jika email gagal terkirim
+        console.error('Failed to send reporter email via Resend:', emailError);
       }
+    }
+
+    try {
+      await sendInternalNotificationEmail({
+        reportId: requestCode,
+        reportType: type,
+        reporterName,
+        subject: emailSubject,
+      });
+    } catch (emailError) {
+      console.error('Failed to send organization notification email via Resend:', emailError);
     }
 
     return NextResponse.json({ 

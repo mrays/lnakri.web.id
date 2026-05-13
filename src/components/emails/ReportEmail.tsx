@@ -11,18 +11,32 @@ import * as React from "react";
 
 interface ReportEmailProps {
   reportId: string;
+  reportType?: string;
+  reporterName?: string;
+  subject?: string;
 }
 
-export const ReportEmail = ({ reportId }: ReportEmailProps) => (
+const typeLabels: Record<string, string> = {
+  keluhan: 'Keluhan Umum',
+  mbg: 'Laporan MBG',
+  bantuan_hukum: 'Bantuan Hukum',
+  perlindungan: 'Perlindungan Hukum',
+  konsultasi: 'Konsultasi',
+};
+
+export const ReportEmail = ({ reportId, reportType, reporterName, subject }: ReportEmailProps) => (
   <Html>
     <Head />
-    <Preview>Laporan Baru Telah Dibuat</Preview>
+    <Preview>Laporan baru telah masuk</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Laporan Baru</Heading>
+        <Heading style={h1}>Laporan baru telah masuk</Heading>
         <Text style={text}>
-          Laporan baru telah dibuat dengan ID: <strong>{reportId}</strong>
+          Laporan baru telah diterima dengan ID: <strong>{reportId}</strong>
         </Text>
+        {reportType ? <Text style={text}>Jenis: <strong>{typeLabels[reportType] || reportType}</strong></Text> : null}
+        {reporterName ? <Text style={text}>Pelapor: <strong>{reporterName}</strong></Text> : null}
+        {subject ? <Text style={text}>Subjek: <strong>{subject}</strong></Text> : null}
         <Text style={text}>
           Silakan periksa dasbor Anda untuk melihat detail laporan.
         </Text>

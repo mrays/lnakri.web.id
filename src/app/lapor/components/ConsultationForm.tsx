@@ -65,21 +65,44 @@ export default function ConsultationForm() {
 
   const onStart = async (data: ConsultForm) => {
     setSubmitting(true);
-    // TODO: Connect to backend POST /api/consultations to create session
-    await new Promise(r => setTimeout(r, 1000));
-    setUserName(data.name);
-    setMessages([
-      {
-        id: 'msg-welcome',
-        role: 'admin',
-        content: `Selamat datang ${data.name}! Saya dari tim konsultan hukum LNAKRI NGO. Anda mengajukan konsultasi tentang: "${data.topik}". Silakan sampaikan pertanyaan atau kronologis Anda, dan kami akan segera membantu.\n\nPertanyaan awal Anda: "${data.pertanyaan}"`,
-        time: getTime(),
-        senderName: 'Tim LNAKRI NGO',
-      },
-    ]);
-    setSubmitting(false);
-    setPhase('chat');
-    toast.success('Sesi konsultasi dimulai! Tim LNAKRI akan segera merespons.');
+    try {
+      const requestCode = `KONS-${Date.now().toString().slice(-6)}`;
+      const formData = new FormData();
+      formData.append('requestCode', requestCode);
+      formData.append('name', data.name);
+      formData.append('email', data.email);
+      formData.append('phone', data.phone || '');
+      formData.append('topik', data.topik);
+      formData.append('pertanyaan', data.pertanyaan);
+
+      const response = await fetch('/api/consultations', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'failed');
+      }
+
+      setUserName(data.name);
+      setMessages([
+        {
+          id: 'msg-welcome',
+          role: 'admin',
+          content: `Selamat datang ${data.name}! Permintaan konsultasi Anda tentang "${data.topik}" sudah kami terima. Tim LNAKRI NGO akan segera membantu.\n\nPertanyaan awal Anda: "${data.pertanyaan}"`,
+          time: getTime(),
+          senderName: 'Tim LNAKRI NGO',
+        },
+      ]);
+      setPhase('chat');
+      toast.success(`Konsultasi berhasil diterima! Nomor tiket: ${requestCode}`);
+    } catch (error) {
+      console.error('Failed to submit consultation:', error);
+      toast.error('Gagal memulai konsultasi. Coba lagi.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const sendChat = async () => {

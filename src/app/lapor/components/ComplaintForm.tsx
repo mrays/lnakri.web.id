@@ -66,20 +66,6 @@ export default function ComplaintForm() {
         setTicketId(result.requestCode);
         setSubmitted(true);
         toast.success(`Laporan berhasil dikirim! Nomor tiket: ${result.requestCode}`);
-
-        // Kirim notifikasi email
-        try {
-          await fetch('/api/send', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ reportId: result.requestCode }),
-          });
-        } catch (emailError) {
-          console.error('Gagal mengirim notifikasi email:', emailError);
-        }
-        
       } else {
         toast.error('Gagal mengirim laporan. Silakan coba lagi.');
       }

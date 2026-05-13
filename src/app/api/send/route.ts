@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import ComplaintCreatedEmail from "@/components/emails/ComplaintCreatedEmail";
+import { getMysqlPool } from "@/lib/mysql";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -15,10 +16,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const pool = getMysqlPool();
+    const [rows] = await pool.query('SELECT email FROM organization_profiles WHERE id = 1 LIMIT 1');
+    const organizationEmail = String((rows as any[])[0]?.email || '').trim();
+
+    if (!organizationEmail) {
+      return NextResponse.json({ error: 'Organization email not configured' }, { status: 400 });
+    }
+
     const { data, error } = await resend.emails.send({
       from: "LNAKRI NGO <noreply@lnakri.web.id>",
-      to: ["muhamadazizul11@gmail.com"],
-      subject: `Laporan Baru Telah Dibuat - ${reportId}`,
+      to: [organizationEmail],
+      subject: `Laporan Baru Masuk - ${reportId}`,
       react: ComplaintCreatedEmail({
         reporterName: 'Tim Admin',
         requestCode: reportId,
