@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import ComplaintCreatedEmail from '@/components/emails/ComplaintCreatedEmail';
 import ComplaintStatusUpdatedEmail from '@/components/emails/ComplaintStatusUpdatedEmail';
+import ConsultationCreatedEmail from '@/components/emails/ConsultationCreatedEmail';
 import ReportEmail from '@/components/emails/ReportEmail';
 import { getMysqlPool } from '@/lib/mysql';
 
@@ -40,6 +41,25 @@ export async function sendComplaintCreatedEmail(input: {
     to: [input.to],
     subject: `[LNAKRI] Laporan Anda Diterima - ${input.requestCode}`,
     react: ComplaintCreatedEmail(input),
+  });
+}
+
+export async function sendConsultationCreatedEmail(input: {
+  to: string;
+  reporterName: string;
+  requestCode: string;
+  subject: string;
+  createdAt?: string;
+}) {
+  if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 'your_resend_api_key_here') {
+    return;
+  }
+
+  await resend.emails.send({
+    from: fromAddress,
+    to: [input.to],
+    subject: `[LNAKRI] Konsultasi Anda Diterima - ${input.requestCode}`,
+    react: ConsultationCreatedEmail(input),
   });
 }
 

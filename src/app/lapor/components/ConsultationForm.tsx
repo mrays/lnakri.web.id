@@ -118,7 +118,6 @@ export default function ConsultationForm() {
     setChatInput('');
     setSending(true);
 
-    // TODO: Connect to real-time backend WebSocket or POST /api/consultations/:id/messages
     await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
     const reply = autoReplies[Math.floor(Math.random() * autoReplies.length)].replace('082295592545', phone);
     const adminMsg: ChatMessage = {

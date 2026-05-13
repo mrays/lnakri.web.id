@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMysqlPool } from '@/lib/mysql';
-import { sendComplaintCreatedEmail, sendInternalNotificationEmail } from '@/lib/complaint-email';
+import { sendConsultationCreatedEmail, sendInternalNotificationEmail } from '@/lib/complaint-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,13 +48,11 @@ export async function POST(request: Request) {
     });
 
     try {
-      await sendComplaintCreatedEmail({
+      await sendConsultationCreatedEmail({
         to: email,
         reporterName: name,
         requestCode,
         subject: topik,
-        type: 'konsultasi',
-        location: 'Online',
         createdAt: createdAtLabel,
       });
     } catch (emailError) {
