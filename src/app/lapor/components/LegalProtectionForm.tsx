@@ -31,15 +31,64 @@ export default function LegalProtectionForm() {
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<ProtectionFormData>();
 
+  const handleFileAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setBuktiFiles((prev) => [...prev, ...files].slice(0, 5));
+  };
+
+  const removeFile = (idx: number) => {
+    setBuktiFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const onSubmit = async (data: ProtectionFormData) => {
     setSubmitting(true);
-    // TODO: Connect to backend POST /api/legal-protection with FormData
-    await new Promise(r => setTimeout(r, 1500));
-    const id = 'LPSK-DRAFT-' + Date.now().toString().slice(-6);
-    setDraftId(id);
-    setSubmitting(false);
-    setSubmitted(true);
-    toast.success(`Draft permohonan perlindungan hukum berhasil disimpan! ID: ${id}`);
+    try {
+      const id = 'LPSK-DRAFT-' + Date.now().toString().slice(-6);
+      const formData = new FormData();
+      formData.append('requestCode', id);
+      formData.append('fullName', data.fullName);
+      formData.append('email', data.email);
+      formData.append('phone', data.phone);
+      formData.append('nik', data.nik);
+      formData.append('address', data.address || '');
+      formData.append('peranDalamKasus', data.peranDalamKasus);
+      formData.append('namaKasus', data.namaKasus);
+      formData.append('instansiTerkait', data.instansiTerkait || '');
+      formData.append('ancamanYangDiterima', data.ancamanYangDiterima);
+      formData.append('kronologis', data.kronologis);
+      formData.append('sudahLaporLPSK', data.sudahLaporLPSK || 'belum');
+      formData.append('butuhPerlindunganFisik', String(Boolean(data.butuhPerlindunganFisik)));
+      formData.append('butuhPerlindunganIdentitas', String(Boolean(data.butuhPerlindunganIdentitas)));
+      formData.append('butuhPerlindunganHukum', String(Boolean(data.butuhPerlindunganHukum)));
+      formData.append('agreeTerms', String(Boolean(data.agreeTerms)));
+      formData.append('sourcePage', 'legal-protection-form');
+
+      buktiFiles.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await fetch('/api/legal-protection', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'failed');
+      }
+
+      const result = await response.json();
+      const requestCode = result.requestCode || id;
+
+      setDraftId(requestCode);
+      setSubmitted(true);
+      toast.success(`Draft permohonan perlindungan hukum berhasil disimpan! ID: ${requestCode}`);
+    } catch (error) {
+      console.error('Failed to submit legal protection draft:', error);
+      toast.error('Gagal mengirim draft perlindungan hukum. Coba lagi.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -203,8 +252,7 @@ export default function LegalProtectionForm() {
                 <Upload size={24} className="text-green-400" />
                 <span className="text-sm text-gray-600 font-600">Upload Bukti Pendukung</span>
                 <span className="text-xs text-gray-400">JPG, PNG, PDF (maks. 10MB per file)</span>
-                <input type="file" className="hidden" multiple accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={e => { const f = Array.from(e.target.files || []); setBuktiFiles(prev => [...prev, ...f].slice(0, 5)); }} />
+                <input type="file" className="hidden" multiple accept=".jpg,.jpeg,.png,.pdf" onChange={handleFileAdd} />
               </label>
             )}
           </div>

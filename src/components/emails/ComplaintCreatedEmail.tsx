@@ -26,6 +26,8 @@ const typeLabels: Record<string, string> = {
   keluhan: 'Keluhan Umum',
   mbg: 'Laporan MBG',
   bantuan_hukum: 'Bantuan Hukum',
+  perlindungan: 'Perlindungan Hukum',
+  konsultasi: 'Konsultasi',
 };
 
 export const ComplaintCreatedEmail = ({
