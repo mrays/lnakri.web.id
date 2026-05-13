@@ -22,6 +22,15 @@ export interface UploadOptions {
   metadata?: Record<string, string>;
 }
 
+function isMissingR2Object(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'Code' in error &&
+      (error as { Code?: string }).Code === 'NoSuchKey'
+  );
+}
+
 /**
  * Test R2 connection
  */
@@ -110,7 +119,9 @@ export async function getFromR2(key: string): Promise<Buffer | null> {
 
     return null;
   } catch (error) {
-    console.error('R2 Get Error:', error);
+    if (!isMissingR2Object(error)) {
+      console.error('R2 Get Error:', error);
+    }
     return null;
   }
 }
