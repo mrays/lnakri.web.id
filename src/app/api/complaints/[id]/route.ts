@@ -49,3 +49,17 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({ message: 'Gagal memperbarui status keluhan.', error: String(error) }, { status: 500 });
   }
 }
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    const pool = getMysqlPool();
+
+    await pool.query('DELETE FROM case_request_attachments WHERE case_request_id = ?', [Number(id)]);
+    await pool.query('DELETE FROM case_requests WHERE id = ?', [Number(id)]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ message: 'Gagal menghapus keluhan.', error: String(error) }, { status: 500 });
+  }
+}

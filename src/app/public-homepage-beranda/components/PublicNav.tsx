@@ -5,7 +5,7 @@ import AppLogo from '@/components/ui/AppLogo';
 import { Menu, X, Phone, Shield } from 'lucide-react';
 
 const navLinks = [
-  { label: 'Beranda', href: '#beranda', key: 'nav-beranda' },
+  { label: 'Beranda', href: '/', key: 'nav-beranda' },
   { label: 'Berita', href: '#berita', key: 'nav-berita' },
   { label: 'Pengumuman', href: '#pengumuman', key: 'nav-pengumuman' },
   { label: 'Profil', href: '#profil', key: 'nav-profil' },

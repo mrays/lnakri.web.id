@@ -1,12 +1,37 @@
 import { NextResponse } from 'next/server';
 import { getMysqlPool } from '@/lib/mysql';
-import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-import { buildStoredFileName, getComplaintUploadDir, getComplaintUploadUrl } from '@/lib/upload-storage';
+import { buildStoredFileName, getComplaintUploadUrl } from '@/lib/upload-storage';
+import { uploadToR2, getPublicUrl } from '@/lib/r2-storage';
 import { sendComplaintCreatedEmail } from '@/lib/complaint-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+function normalizeAttachmentUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+
+  const trimmed = String(url).trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('/api/uploads/')) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('/uploads/')) {
+    return `/api${trimmed}`;
+  }
+
+  if (trimmed.startsWith('uploads/')) {
+    return `/api/${trimmed}`;
+  }
+
+  return trimmed;
+}
 
 export async function GET() {
   try {
@@ -34,8 +59,9 @@ export async function GET() {
 
       for (const attachment of attachmentRows as any[]) {
         const existing = attachmentsByCaseId.get(attachment.case_request_id) || [];
+        const normalizedUrl = normalizeAttachmentUrl(attachment.file_url);
         existing.push({
-          fileUrl: attachment.file_url,
+          fileUrl: normalizedUrl || '',
           fileName: attachment.file_name,
           originalFileName: attachment.original_file_name,
         });
@@ -58,10 +84,10 @@ export async function GET() {
         time: new Date(row.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
         type: row.request_type,
         hasDokumen: attachments.length > 0 || Boolean(row.has_dokumen),
-        attachmentUrl: attachments[0]?.fileUrl || null,
+        attachmentUrl: normalizeAttachmentUrl(attachments[0]?.fileUrl) || null,
         attachmentName: attachments[0]?.originalFileName || attachments[0]?.fileName || null,
         attachmentCount: attachments.length,
-        attachments,
+        attachments: attachments.filter((attachment) => Boolean(attachment.fileUrl)),
         location: row.location,
       };
     });
@@ -119,26 +145,22 @@ export async function POST(request: Request) {
     const [result]: any = await pool.query(sql, values);
     const caseRequestId = result.insertId;
 
-    // Handle file uploads
+    // Handle file uploads to R2
     const files = formData.getAll('files') as File[];
     
     if (files.length > 0) {
-      const uploadDir = getComplaintUploadDir(requestCode);
+      for (const file of files) {
+        if (file.size === 0) continue;
 
-      try {
-        await mkdir(uploadDir, { recursive: true });
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const fileName = buildStoredFileName(file.name);
+          const r2Key = `cases/${requestCode}/${fileName}`;
 
-        for (const file of files) {
-          if (file.size === 0) continue;
+          const result = await uploadToR2(r2Key, buffer, { contentType: file.type });
 
-          try {
-            const buffer = Buffer.from(await file.arrayBuffer());
-            const fileName = buildStoredFileName(file.name);
-            const filePath = path.join(uploadDir, fileName);
-
-            await writeFile(filePath, buffer);
-
-            const fileUrl = getComplaintUploadUrl(requestCode, fileName);
+          if (result.success) {
+            const fileUrl = getPublicUrl(r2Key);
 
             await pool.query(
               `INSERT INTO case_request_attachments (
@@ -152,16 +174,16 @@ export async function POST(request: Request) {
                 fileUrl,
                 file.type,
                 file.size,
-                'ephemeral',
+                'r2',
                 'user'
               ]
             );
-          } catch (attachmentError) {
-            console.error('Failed to save complaint attachment:', attachmentError);
+          } else {
+            console.error('Failed to upload file to R2:', result.error);
           }
+        } catch (attachmentError) {
+          console.error('Failed to save complaint attachment:', attachmentError);
         }
-      } catch (uploadError) {
-        console.error('Failed to prepare complaint upload directory:', uploadError);
       }
     }
 

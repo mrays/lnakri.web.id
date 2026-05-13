@@ -48,6 +48,8 @@ export default function NewsManagement() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm<NewsForm>();
 
@@ -180,6 +182,7 @@ export default function NewsManagement() {
       toast.error('Gagal menyambung ke server');
     } finally {
       setDeleteConfirm(null);
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
     }
   };
 
@@ -187,6 +190,65 @@ export default function NewsManagement() {
   n.title.toLowerCase().includes(search.toLowerCase()) ||
   n.author.toLowerCase().includes(search.toLowerCase())
   );
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAllFiltered = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !filtered.some((item) => item.id === id)));
+      return;
+    }
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((item) => next.add(item.id));
+      return Array.from(next);
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(`Hapus ${selectedIds.length} berita terpilih?`);
+    if (!confirmed) return;
+
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((id) =>
+          fetch(`/api/news/${id}`, { method: 'DELETE' }).then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'Gagal menghapus');
+            return id;
+          })
+        )
+      );
+
+      const deletedIds = results
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (deletedIds.length > 0) {
+        setNewsList((prev) => prev.filter((item) => !deletedIds.includes(item.id)));
+      }
+      setSelectedIds([]);
+
+      const failedCount = results.length - deletedIds.length;
+      if (failedCount === 0) {
+        toast.success(`Berhasil menghapus ${deletedIds.length} berita.`);
+      } else {
+        toast.error(`${failedCount} berita gagal dihapus. Sisanya berhasil.`);
+      }
+    } catch (error) {
+      toast.error('Gagal menyambung ke server');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -208,6 +270,25 @@ export default function NewsManagement() {
         className="input-field pl-9 max-w-md" />
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={toggleSelectAllFiltered}
+          disabled={filtered.length === 0}
+          className="btn-outline text-sm"
+        >
+          {allFilteredSelected ? 'Batal Pilih Semua' : 'Pilih Semua'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDeleteSelected}
+          disabled={selectedIds.length === 0 || bulkDeleting}
+          className="bg-red-700 hover:bg-red-800 text-white font-700 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {bulkDeleting ? 'Menghapus...' : `Hapus Terpilih (${selectedIds.length})`}
+        </button>
+      </div>
+
       {/* News Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
         {loading ? (
@@ -218,6 +299,14 @@ export default function NewsManagement() {
           filtered.map((news) => (
             <div key={news.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-all duration-200 group">
               <div className="relative h-40 overflow-hidden">
+                <div className="absolute top-2 left-2 z-10 bg-white/90 rounded-md px-1.5 py-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(news.id)}
+                    onChange={() => toggleSelectOne(news.id)}
+                    aria-label={`Pilih berita ${news.title}`}
+                  />
+                </div>
                 <AppImage
                 src={news.image}
                 alt={news.imageAlt}

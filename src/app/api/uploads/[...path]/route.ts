@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getUploadStorageRoot } from '@/lib/upload-storage';
+import { getFromR2 } from '@/lib/r2-storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,14 +25,15 @@ function getContentType(filePath: string) {
   }
 }
 
-export async function GET(_: Request, context: { params: { path: string[] } }) {
+export async function GET(_: Request, context: { params: Promise<{ path: string[] }> }) {
   try {
-    const segments = context.params.path || [];
+    const { path: segments = [] } = await context.params;
 
     if (segments.length === 0) {
       return NextResponse.json({ message: 'File tidak ditemukan.' }, { status: 404 });
     }
 
+    // Try local storage first
     const storageRoot = path.resolve(getUploadStorageRoot());
     const resolvedPath = path.resolve(path.join(storageRoot, ...segments));
 
@@ -40,16 +42,45 @@ export async function GET(_: Request, context: { params: { path: string[] } }) {
     }
 
     const stat = await fs.stat(resolvedPath).catch(() => null);
-    if (!stat || !stat.isFile()) {
+    if (stat && stat.isFile()) {
+      const fileBuffer = await fs.readFile(resolvedPath);
+      return new NextResponse(fileBuffer, {
+        headers: {
+          'Content-Type': getContentType(resolvedPath),
+          'Content-Disposition': `attachment; filename="${path.basename(resolvedPath)}"`,
+        },
+      });
+    }
+
+    // Try legacy public uploads folder
+    const publicUploadsRoot = path.resolve(path.join(process.cwd(), 'public', 'uploads'));
+    const publicResolvedPath = path.resolve(path.join(publicUploadsRoot, ...segments));
+
+    if (publicResolvedPath === publicUploadsRoot || publicResolvedPath.startsWith(`${publicUploadsRoot}${path.sep}`)) {
+      const publicStat = await fs.stat(publicResolvedPath).catch(() => null);
+      if (publicStat && publicStat.isFile()) {
+        const fileBuffer = await fs.readFile(publicResolvedPath);
+        return new NextResponse(fileBuffer, {
+          headers: {
+            'Content-Type': getContentType(publicResolvedPath),
+            'Content-Disposition': `attachment; filename="${path.basename(publicResolvedPath)}"`,
+          },
+        });
+      }
+    }
+
+    // Fallback to R2
+    const r2Key = segments.join('/');
+    const fileBuffer = await getFromR2(r2Key);
+
+    if (!fileBuffer) {
       return NextResponse.json({ message: 'File tidak ditemukan.' }, { status: 404 });
     }
 
-    const fileBuffer = await fs.readFile(resolvedPath);
-
     return new NextResponse(fileBuffer, {
       headers: {
-        'Content-Type': getContentType(resolvedPath),
-        'Content-Disposition': `attachment; filename="${path.basename(resolvedPath)}"`,
+        'Content-Type': getContentType(r2Key),
+        'Content-Disposition': `attachment; filename="${path.basename(r2Key)}"`,
       },
     });
   } catch (error) {

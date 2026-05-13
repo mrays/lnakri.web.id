@@ -32,6 +32,8 @@ export default function FounderManagement() {
   const [isPhotoUploading, setIsPhotoUploading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm<FounderForm>();
 
@@ -146,10 +148,67 @@ export default function FounderManagement() {
       const response = await fetch(`/api/founders/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('failed');
       setFounders((prev) => prev.filter((f) => f.id !== id));
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
       setDeleteConfirm(null);
       toast.success('Data pendiri berhasil dihapus.');
     } catch {
       toast.error('Hapus gagal. Coba lagi.');
+    }
+  };
+
+  const allSelected = founders.length > 0 && founders.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(founders.map((item) => item.id));
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(`Hapus ${selectedIds.length} data pendiri terpilih?`);
+    if (!confirmed) return;
+
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((id) =>
+          fetch(`/api/founders/${id}`, { method: 'DELETE' }).then(async (res) => {
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data.message || 'Gagal menghapus');
+            }
+            return id;
+          })
+        )
+      );
+
+      const deletedIds = results
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (deletedIds.length > 0) {
+        setFounders((prev) => prev.filter((item) => !deletedIds.includes(item.id)));
+      }
+      setSelectedIds([]);
+
+      const failedCount = results.length - deletedIds.length;
+      if (failedCount === 0) {
+        toast.success(`Berhasil menghapus ${deletedIds.length} data pendiri.`);
+      } else {
+        toast.error(`${failedCount} data pendiri gagal dihapus. Sisanya berhasil.`);
+      }
+    } catch {
+      toast.error('Hapus massal gagal. Coba lagi.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -163,6 +222,20 @@ export default function FounderManagement() {
         <button onClick={openCreate} className="btn-primary text-sm"><Plus size={16} /> Tambah Pendiri</button>
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <button type="button" onClick={toggleSelectAll} disabled={founders.length === 0} className="btn-outline text-sm">
+          {allSelected ? 'Batal Pilih Semua' : 'Pilih Semua'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDeleteSelected}
+          disabled={selectedIds.length === 0 || bulkDeleting}
+          className="bg-red-700 text-white font-700 text-sm px-4 py-2 rounded-lg hover:bg-red-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {bulkDeleting ? 'Menghapus...' : `Hapus Terpilih (${selectedIds.length})`}
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {isLoadingFounders &&
         <div className="col-span-full bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-500 text-sm">
@@ -172,6 +245,14 @@ export default function FounderManagement() {
         {founders.map((f) =>
         <div key={f.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden group hover:shadow-md transition-all duration-200">
             <div className="relative h-52 overflow-hidden">
+              <div className="absolute top-2 left-2 z-10 bg-white/90 rounded-md px-1.5 py-1">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(f.id)}
+                  onChange={() => toggleSelectOne(f.id)}
+                  aria-label={`Pilih pendiri ${f.name}`}
+                />
+              </div>
               <AppImage src={f.photo} alt={f.photoAlt} fill className="object-cover object-top" sizes="25vw" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               <div className="absolute bottom-3 left-3 right-3">

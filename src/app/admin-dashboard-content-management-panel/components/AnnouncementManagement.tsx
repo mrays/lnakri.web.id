@@ -34,6 +34,8 @@ export default function AnnouncementManagement() {
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm<AnnForm>();
 
@@ -119,6 +121,61 @@ export default function AnnouncementManagement() {
       toast.error('Gagal menyambung ke server');
     } finally {
       setDeleteConfirm(null);
+      setSelectedIds((prev) => prev.filter((item) => item !== id));
+    }
+  };
+
+  const allSelected = annList.length > 0 && annList.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(annList.map((item) => item.id));
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(`Hapus ${selectedIds.length} pengumuman terpilih?`);
+    if (!confirmed) return;
+
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((id) =>
+          fetch(`/api/announcements/${id}`, { method: 'DELETE' }).then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'Gagal menghapus');
+            return id;
+          })
+        )
+      );
+
+      const deletedIds = results
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (deletedIds.length > 0) {
+        setAnnList((prev) => prev.filter((item) => !deletedIds.includes(item.id)));
+      }
+      setSelectedIds([]);
+
+      const failedCount = results.length - deletedIds.length;
+      if (failedCount === 0) {
+        toast.success(`Berhasil menghapus ${deletedIds.length} pengumuman.`);
+      } else {
+        toast.error(`${failedCount} pengumuman gagal dihapus. Sisanya berhasil.`);
+      }
+    } catch (error) {
+      toast.error('Gagal menyambung ke server');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -154,6 +211,20 @@ export default function AnnouncementManagement() {
         <button onClick={openCreate} className="btn-primary text-sm"><Plus size={16} /> Buat Pengumuman</button>
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <button type="button" onClick={toggleSelectAll} disabled={annList.length === 0} className="btn-outline text-sm">
+          {allSelected ? 'Batal Pilih Semua' : 'Pilih Semua'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDeleteSelected}
+          disabled={selectedIds.length === 0 || bulkDeleting}
+          className="bg-red-700 hover:bg-red-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-700 text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          {bulkDeleting ? 'Menghapus...' : `Hapus Terpilih (${selectedIds.length})`}
+        </button>
+      </div>
+
       <div className="space-y-4">
         {loading ? (
           <div className="text-center py-10 text-gray-500">Memuat data pengumuman...</div>
@@ -166,6 +237,14 @@ export default function AnnouncementManagement() {
               <div key={ann.id} className={`bg-white rounded-xl border shadow-sm p-5 transition-all duration-200 ${ann.active ? 'border-gray-100' : 'border-gray-200 opacity-60'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
+                    <div className="mb-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(ann.id)}
+                        onChange={() => toggleSelectOne(ann.id)}
+                        aria-label={`Pilih pengumuman ${ann.title}`}
+                      />
+                    </div>
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
                       <span className={`text-xs font-700 px-2.5 py-0.5 rounded-full ${prio.color}`}>{prio.label}</span>
                       <span className="text-xs text-gray-500">{ann.date}</span>

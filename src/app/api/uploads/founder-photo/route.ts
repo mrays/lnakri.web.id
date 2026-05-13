@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buildStoredFileName, getUploadStorageRoot, getUploadUrl } from '@/lib/upload-storage';
+import { buildStoredFileName, getUploadUrl } from '@/lib/upload-storage';
+import { uploadToR2, getPublicUrl } from '@/lib/r2-storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,14 +25,17 @@ export async function POST(request: Request) {
     }
 
     const filename = `${buildStoredFileName(file.name || 'image')}${extension}`;
-    const absoluteDir = path.join(getUploadStorageRoot(), 'founders');
-    const absolutePath = path.join(absoluteDir, filename);
+    const r2Key = `founders/${filename}`;
+    const contentType = file.type || 'application/octet-stream';
 
-    await fs.mkdir(absoluteDir, { recursive: true });
     const bytes = await file.arrayBuffer();
-    await fs.writeFile(absolutePath, Buffer.from(bytes));
+    const result = await uploadToR2(r2Key, Buffer.from(bytes), { contentType });
 
-    return NextResponse.json({ url: getUploadUrl('founders', filename) });
+    if (!result.success) {
+      return NextResponse.json({ message: 'Gagal upload foto ke R2.', error: result.error }, { status: 500 });
+    }
+
+    return NextResponse.json({ url: getPublicUrl(r2Key) });
   } catch (error) {
     return NextResponse.json({ message: 'Gagal upload foto.', error: String(error) }, { status: 500 });
   }

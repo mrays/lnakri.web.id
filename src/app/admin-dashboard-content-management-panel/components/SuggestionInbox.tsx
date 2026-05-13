@@ -17,6 +17,8 @@ export default function SuggestionInbox() {
   const [selected, setSelected] = useState<Suggestion | null>(null);
   const [loading, setLoading] = useState(true);
   const [adminEmail, setAdminEmail] = useState('dpplnakri@gmail.com');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -74,6 +76,7 @@ export default function SuggestionInbox() {
       });
       if (res.ok) {
         setSuggestions(prev => prev.filter(s => s.id !== id));
+        setSelectedIds(prev => prev.filter(item => item !== id));
         if (selected?.id === id) setSelected(null);
         toast.success('Saran dihapus.');
       } else {
@@ -82,6 +85,65 @@ export default function SuggestionInbox() {
     } catch (error) {
       console.error('Failed to delete suggestion:', error);
       toast.error('Terjadi kesalahan saat menghapus.');
+    }
+  };
+
+  const deleteSuggestionById = async (id: string) => {
+    const res = await fetch(`/api/suggestions/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      throw new Error('Gagal menghapus saran.');
+    }
+    return id;
+  };
+
+  const allSelected = suggestions.length > 0 && suggestions.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(suggestions.map((item) => item.id));
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(`Hapus ${selectedIds.length} saran terpilih?`);
+    if (!confirmed) return;
+
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(selectedIds.map((id) => deleteSuggestionById(id)));
+      const deletedIds = results
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (deletedIds.length > 0) {
+        setSuggestions((prev) => prev.filter((item) => !deletedIds.includes(item.id)));
+        if (selected && deletedIds.includes(selected.id)) {
+          setSelected(null);
+        }
+      }
+
+      setSelectedIds([]);
+
+      const failedCount = results.length - deletedIds.length;
+      if (failedCount === 0) {
+        toast.success(`Berhasil menghapus ${deletedIds.length} saran.`);
+      } else {
+        toast.error(`${failedCount} saran gagal dihapus. Sisanya berhasil.`);
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan saat menghapus.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -111,6 +173,20 @@ export default function SuggestionInbox() {
         </div>
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <button type="button" onClick={toggleSelectAll} disabled={suggestions.length === 0} className="btn-outline text-sm">
+          {allSelected ? 'Batal Pilih Semua' : 'Pilih Semua'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDeleteSelected}
+          disabled={selectedIds.length === 0 || bulkDeleting}
+          className="bg-red-700 hover:bg-red-800 text-white font-700 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {bulkDeleting ? 'Menghapus...' : `Hapus Terpilih (${selectedIds.length})`}
+        </button>
+      </div>
+
       {loading ? (
         <div className="text-center py-10 text-gray-500">Memuat saran...</div>
       ) : suggestions.length === 0 ? (
@@ -123,6 +199,13 @@ export default function SuggestionInbox() {
               className={`bg-white rounded-xl border shadow-sm p-5 cursor-pointer hover:shadow-md transition-all duration-200 ${!s.read ? 'border-blue-200 bg-blue-50/30' : 'border-gray-100'}`}>
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(s.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSelectOne(s.id)}
+                    aria-label={`Pilih saran dari ${s.name}`}
+                  />
                   <div className="w-8 h-8 bg-[#1a3a5c]/10 rounded-full flex items-center justify-center font-700 text-[#1a3a5c] text-xs">
                     {s.name.charAt(0)}
                   </div>

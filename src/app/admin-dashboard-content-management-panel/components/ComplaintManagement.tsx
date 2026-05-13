@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Search, Filter, Eye, CheckCircle, AlertCircle, Download, X } from 'lucide-react';
+import { Search, Eye, CheckCircle, Download, X, Trash2 } from 'lucide-react';
 
 type Complaint = {
   id: string;
@@ -56,6 +56,8 @@ export default function ComplaintManagement() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [viewComplaint, setViewComplaint] = useState<Complaint | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchComplaints();
@@ -100,6 +102,74 @@ export default function ComplaintManagement() {
     }
   };
 
+  const handleDeleteComplaint = async (id: string) => {
+    const confirmed = window.confirm('Hapus laporan ini secara permanen?');
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/complaints/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.message || 'Gagal menghapus keluhan');
+        return;
+      }
+
+      setComplaints((prev) => prev.filter((item) => item.id !== id));
+      setSelectedIds((prev) => prev.filter((selectedId) => selectedId !== id));
+      if (viewComplaint?.id === id) {
+        setViewComplaint(null);
+      }
+      toast.success('Keluhan berhasil dihapus.');
+    } catch (error) {
+      toast.error('Gagal menyambung ke server');
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(`Hapus ${selectedIds.length} laporan terpilih?`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((id) =>
+          fetch(`/api/complaints/${id}`, { method: 'DELETE' }).then(async (res) => {
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.message || 'Gagal menghapus');
+            return id;
+          })
+        )
+      );
+
+      const deletedIds = results
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+        .map((result) => result.value);
+
+      if (deletedIds.length > 0) {
+        setComplaints((prev) => prev.filter((item) => !deletedIds.includes(item.id)));
+        if (viewComplaint && deletedIds.includes(viewComplaint.id)) {
+          setViewComplaint(null);
+        }
+      }
+
+      setSelectedIds([]);
+
+      const failedCount = results.length - deletedIds.length;
+      if (failedCount === 0) {
+        toast.success(`Berhasil menghapus ${deletedIds.length} keluhan.`);
+      } else {
+        toast.error(`${failedCount} keluhan gagal dihapus. Sisanya berhasil.`);
+      }
+    } catch (error) {
+      toast.error('Gagal menyambung ke server');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filtered = complaints.filter(c => {
     const matchSearch = c.reporterName.toLowerCase().includes(search.toLowerCase()) ||
       c.subject.toLowerCase().includes(search.toLowerCase()) ||
@@ -108,6 +178,25 @@ export default function ComplaintManagement() {
     const matchType = filterType === 'all' || c.type === filterType;
     return matchSearch && matchStatus && matchType;
   });
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAllFiltered = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !filtered.some((item) => item.id === id)));
+      return;
+    }
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((item) => next.add(item.id));
+      return Array.from(next);
+    });
+  };
 
   const downloadAttachment = (complaint: Complaint) => {
     if (!complaint.attachmentUrl) return;
@@ -173,6 +262,22 @@ export default function ComplaintManagement() {
           <option value="mbg">Laporan MBG</option>
           <option value="bantuan_hukum">Bantuan Hukum</option>
         </select>
+        <button
+          type="button"
+          onClick={toggleSelectAllFiltered}
+          className="btn-outline text-sm"
+          disabled={filtered.length === 0}
+        >
+          {allFilteredSelected ? 'Batal Pilih Semua' : 'Pilih Semua'}
+        </button>
+        <button
+          type="button"
+          onClick={handleDeleteSelected}
+          disabled={selectedIds.length === 0 || deleting}
+          className="bg-red-700 hover:bg-red-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-700 text-sm px-4 py-2 rounded-lg transition-colors"
+        >
+          {deleting ? 'Menghapus...' : `Hapus Terpilih (${selectedIds.length})`}
+        </button>
       </div>
 
       {/* Table */}
@@ -181,6 +286,14 @@ export default function ComplaintManagement() {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-left px-4 py-3 text-xs font-700 text-gray-500 uppercase tracking-wide">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAllFiltered}
+                    aria-label="Pilih semua keluhan"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 text-xs font-700 text-gray-500 uppercase tracking-wide">Pelapor</th>
                 <th className="text-left px-4 py-3 text-xs font-700 text-gray-500 uppercase tracking-wide">Subjek</th>
                 <th className="text-left px-4 py-3 text-xs font-700 text-gray-500 uppercase tracking-wide">Jenis</th>
@@ -193,15 +306,23 @@ export default function ComplaintManagement() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-gray-500">Memuat data keluhan...</td>
+                  <td colSpan={8} className="text-center py-10 text-gray-500">Memuat data keluhan...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-10 text-gray-500">Tidak ada keluhan ditemukan</td>
+                  <td colSpan={8} className="text-center py-10 text-gray-500">Tidak ada keluhan ditemukan</td>
                 </tr>
               ) : (
                 filtered.map((c, i) => (
                   <tr key={c.id} className={`border-b border-gray-50 hover:bg-gray-50/80 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(c.id)}
+                        onChange={() => toggleSelectOne(c.id)}
+                        aria-label={`Pilih keluhan ${c.requestCode || c.id}`}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="font-600 text-sm text-[#1a3a5c]">{c.reporterName}</div>
                       <div className="text-xs text-gray-500">{c.email}</div>
@@ -241,10 +362,18 @@ export default function ComplaintManagement() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => setViewComplaint(c)}
-                        className="flex items-center gap-1.5 text-xs font-600 text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg transition-colors">
-                        <Eye size={13} /> Detail
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setViewComplaint(c)}
+                          className="flex items-center gap-1.5 text-xs font-600 text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg transition-colors">
+                          <Eye size={13} /> Detail
+                        </button>
+                        <button
+                          onClick={() => handleDeleteComplaint(c.id)}
+                          className="flex items-center gap-1.5 text-xs font-600 text-red-600 hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={13} /> Hapus
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -252,12 +381,6 @@ export default function ComplaintManagement() {
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && (
-          <div className="py-12 text-center">
-            <AlertCircle size={32} className="text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-600">Tidak ada keluhan ditemukan</p>
-          </div>
-        )}
       </div>
 
       {/* Detail Modal */}
@@ -297,7 +420,7 @@ export default function ComplaintManagement() {
               </div>
               <div>
                 <div className="text-xs text-gray-500 font-600 uppercase tracking-wide mb-1">Kronologis</div>
-                <div className="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-lg px-4 py-3">{viewComplaint.kronologis}</div>
+                <div className="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-lg px-4 py-3 whitespace-pre-wrap break-all overflow-hidden">{viewComplaint.kronologis}</div>
               </div>
               <div className="flex items-center gap-4 pt-2">
                 <div>
@@ -324,11 +447,14 @@ export default function ComplaintManagement() {
                           rel="noreferrer"
                           download={attachment.originalFileName || attachment.fileName}
                           className="flex items-center gap-2 text-sm font-600 text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                          title={attachment.originalFileName || attachment.fileName}
                         >
                           <Download size={14} />
-                          {complaintAttachments(viewComplaint).length > 1
-                            ? `Unduh Lampiran ${index + 1}`
-                            : 'Unduh Dokumen Bukti'}
+                          <span className="max-w-56 truncate">
+                            {complaintAttachments(viewComplaint).length > 1
+                              ? attachment.originalFileName || attachment.fileName
+                              : 'Unduh Dokumen Bukti'}
+                          </span>
                         </a>
                       ))}
                     </div>
