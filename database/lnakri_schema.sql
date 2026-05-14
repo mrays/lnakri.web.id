@@ -6,6 +6,8 @@ DROP TABLE IF EXISTS ai_chat_messages;
 DROP TABLE IF EXISTS ai_chat_sessions;
 DROP TABLE IF EXISTS site_visit_snapshots;
 DROP TABLE IF EXISTS donation_submissions;
+DROP TABLE IF EXISTS site_visit_daily_visitors;
+DROP TABLE IF EXISTS site_visit_page_snapshots;
 DROP TABLE IF EXISTS case_request_messages;
 DROP TABLE IF EXISTS case_request_status_history;
 DROP TABLE IF EXISTS case_request_attachments;
@@ -221,6 +223,29 @@ CREATE TABLE site_visit_snapshots (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_site_visit_snapshots_granularity_period_date (granularity, period_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE site_visit_page_snapshots (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  period_date DATE NOT NULL,
+  path VARCHAR(255) NOT NULL,
+  title VARCHAR(255) DEFAULT NULL,
+  visits INT UNSIGNED NOT NULL DEFAULT 0,
+  unique_visitors INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_site_visit_page_period_path (period_date, path),
+  KEY idx_site_visit_page_period_visits (period_date, visits)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE site_visit_daily_visitors (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  period_date DATE NOT NULL,
+  visitor_hash CHAR(64) NOT NULL,
+  first_path VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_site_visit_daily_visitor (period_date, visitor_hash),
+  KEY idx_site_visit_daily_period (period_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE ai_chat_sessions (
