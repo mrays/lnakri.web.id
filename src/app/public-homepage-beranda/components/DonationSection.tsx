@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Heart, Copy, CheckCircle, Upload, X } from 'lucide-react';
-
+import { buildWhatsAppUrl } from '@/lib/whatsapp';
 
 type DonationForm = {
   donorName: string;
@@ -54,14 +54,6 @@ export default function DonationSection() {
       return;
     }
 
-    const whatsAppNumber = profile?.phone?.replace(/\D/g, '');
-
-    if (!whatsAppNumber) {
-      toast.error('Nomor WhatsApp organisasi tidak ditemukan. Silakan hubungi admin.');
-      setSubmitting(false);
-      return;
-    }
-
     const formattedAmount = `Rp ${Number(data.amount).toLocaleString('id-ID')}`;
 
     const messageLines = [
@@ -77,8 +69,7 @@ export default function DonationSection() {
     ];
     const message = messageLines.join('\n');
 
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${whatsAppNumber}?text=${encodedMessage}`;
+    const whatsappUrl = buildWhatsAppUrl(profile?.phone, message);
 
     window.open(whatsappUrl, '_blank');
 

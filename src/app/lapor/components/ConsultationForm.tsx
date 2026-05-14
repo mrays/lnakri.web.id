@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import AppImage from '@/components/ui/AppImage';
 import { MessageSquare, Send, User, Phone, Mail, Clock } from 'lucide-react';
+import { buildWhatsAppUrl, normalizeWhatsAppNumber } from '@/lib/whatsapp';
 
 type ConsultForm = {
   name: string;
@@ -32,6 +33,8 @@ const autoReplies = [
 export default function ConsultationForm() {
   const [phone, setPhone] = useState('082295592545');
   const [email, setEmail] = useState('dpplnakri@gmail.com');
+
+  const formattedPhone = normalizeWhatsAppNumber(phone);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -225,7 +228,7 @@ export default function ConsultationForm() {
             <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-gray-400">Tim LNAKRI akan merespons secepatnya</p>
               <div className="flex items-center gap-3 text-xs text-gray-500">
-                <a href={`https://wa.me/${phone.startsWith('0') ? '62' + phone.slice(1) : phone}`} className="flex items-center gap-1 hover:text-green-600 transition-colors"><Phone size={11} />{phone}</a>
+                <a href={buildWhatsAppUrl(formattedPhone)} className="flex items-center gap-1 hover:text-green-600 transition-colors"><Phone size={11} />{phone}</a>
                  <a href={`mailto:${email}`} className="flex items-center gap-1 hover:text-red-600 transition-colors"><Mail size={11} />Email</a>
               </div>
             </div>

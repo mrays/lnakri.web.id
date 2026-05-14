@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AppImage from '@/components/ui/AppImage';
 import { Shield, AlertTriangle, FileText, ChevronLeft, ChevronRight, Phone } from 'lucide-react';
+import { buildWhatsAppUrl, normalizeWhatsAppNumber } from '@/lib/whatsapp';
 
 const slides = [
   {
@@ -61,7 +62,7 @@ export default function HeroBanner() {
   }, []);
 
   const slide = slides?.[current];
-  const formattedWa = phone.startsWith('0') ? '62' + phone.slice(1) : phone;
+  const formattedWa = normalizeWhatsAppNumber(phone);
 
   return (
     <section id="beranda" className="relative pt-16 overflow-hidden">
@@ -98,7 +99,7 @@ export default function HeroBanner() {
                 {slide?.cta?.icon}
                 {slide?.cta?.label}
               </Link>
-              <a href={`https://wa.me/${formattedWa}`} target="_blank" rel="noreferrer"
+              <a href={buildWhatsAppUrl(formattedWa)} target="_blank" rel="noreferrer"
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-600 px-6 py-3 rounded-xl transition-all duration-150">
                 <Phone size={16} />
                 Hubungi Kami

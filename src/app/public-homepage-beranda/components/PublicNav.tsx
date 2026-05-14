@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AppLogo from '@/components/ui/AppLogo';
 import { Menu, X, Phone, Shield } from 'lucide-react';
+import { buildWhatsAppUrl } from '@/lib/whatsapp';
 
 const navLinks = [
   { label: 'Beranda', href: '/', key: 'nav-beranda' },
@@ -17,11 +18,27 @@ const navLinks = [
 export default function PublicNav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [phone, setPhone] = useState('082295592545');
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch('/api/organization-profile');
+        const data = await res.json();
+        if (res.ok && data.profile?.phone) {
+          setPhone(data.profile.phone);
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile in PublicNav:', error);
+      }
+    };
+    fetchProfile();
   }, []);
 
   return (
@@ -48,7 +65,7 @@ export default function PublicNav() {
 
           {/* CTA Buttons */}
           <div className="hidden lg:flex items-center gap-3">
-            <a href="https://wa.me/6282295592545" target="_blank" rel="noreferrer"
+            <a href={buildWhatsAppUrl(phone)} target="_blank" rel="noreferrer"
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-600 px-4 py-2 rounded-lg transition-all duration-150">
               <Phone size={14} />
               <span>WA Hotline</span>
