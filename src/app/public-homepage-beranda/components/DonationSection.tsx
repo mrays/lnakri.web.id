@@ -1,208 +1,300 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Heart, Copy, CheckCircle, Upload, X } from 'lucide-react';
-import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { CheckCircle, Heart, Loader2, QrCode, ShieldCheck, Wallet } from 'lucide-react';
+
+declare global {
+  interface Window {
+    SnapPayment?: {
+      pay: (signature: string) => void;
+    };
+  }
+}
 
 type DonationForm = {
   donorName: string;
   donorEmail: string;
   amount: string;
   keterangan: string;
-  bukti: FileList;
 };
 
-export default function DonationSection() {
-  const [copied, setCopied] = useState(false);
-  const [buktiFile, setBuktiFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
+type DonationResponse = {
+  orderId?: string;
+  signature?: string;
+  redirectUrl?: string;
+  qrisUrl?: string | null;
+  qrisImage?: string | null;
+  totalAmount?: string;
+  status?: string;
+  expiredAt?: string;
+  merchantName?: string;
+};
 
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<DonationForm>();
+const quickAmounts = [50000, 100000, 250000, 500000];
+
+function formatRupiah(value: number | string | undefined) {
+  const amount = Number(value || 0);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export default function DonationSection() {
+  const [submitting, setSubmitting] = useState(false);
+  const [donation, setDonation] = useState<DonationResponse | null>(null);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    setValue,
+    watch,
+  } = useForm<DonationForm>();
+  const selectedAmount = watch('amount');
 
   useEffect(() => {
-    fetchProfile();
+    const script = document.createElement('script');
+    script.src = `https://klikqris.com/js/payment-snap.js?t=${Date.now()}`;
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
   }, []);
 
-  const fetchProfile = async () => {
-    try {
-      const res = await fetch('/api/organization-profile');
-      const data = await res.json();
-      if (res.ok) {
-        setProfile(data.profile);
-      }
-    } catch (error) {
-      console.error('Failed to fetch profile:', error);
-    }
-  };
-
-  const copyRek = () => {
-    const rek = profile?.bankAccountNumber || '5790248335';
-    navigator.clipboard.writeText(rek);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const onSubmit = (data: DonationForm) => {
-    setSubmitting(true);
-
-    if (!buktiFile) {
-      toast.error('Mohon upload bukti transfer Anda.');
-      setSubmitting(false);
+  const openPayment = (paymentSignature?: string, fallbackUrl?: string) => {
+    if (paymentSignature && window.SnapPayment) {
+      window.SnapPayment.pay(paymentSignature);
       return;
     }
 
-    const formattedAmount = `Rp ${Number(data.amount).toLocaleString('id-ID')}`;
+    if (fallbackUrl) {
+      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
 
-    const messageLines = [
-      'Halo LNAKRI NGO,',
-      '',
-      'Saya ingin mengonfirmasi donasi saya:',
-      `- Nama Donatur: ${data.donorName}`,
-      `- Email: ${data.donorEmail}`,
-      `- Jumlah Donasi: ${formattedAmount}`,
-      `- Keterangan: ${data.keterangan || '-'}`,
-      '',
-      'Berikut saya lampirkan bukti transfer. Terima kasih.',
-    ];
-    const message = messageLines.join('\n');
-
-    const whatsappUrl = buildWhatsAppUrl(profile?.phone, message);
-
-    window.open(whatsappUrl, '_blank');
-
-    setSubmitting(false);
-    setSubmitted(true);
-    toast.success('Anda dialihkan ke WhatsApp. Silakan kirim pesan & bukti transfer.');
-    reset();
-    setBuktiFile(null);
+    toast.error('Halaman pembayaran belum siap. Silakan coba beberapa detik lagi.');
   };
 
-  const bankName = profile?.bankName || 'Bank BCA';
-  const bankAccountName = profile?.bankAccountName || 'Roddy Maruli Mazmur';
-  const bankAccountNumber = profile?.bankAccountNumber || '5790248335';
+  const onSubmit = async (data: DonationForm) => {
+    setSubmitting(true);
+
+    try {
+      const res = await fetch('/api/donations/qris', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          donorName: data.donorName,
+          donorEmail: data.donorEmail,
+          amount: Number(data.amount),
+          keterangan: data.keterangan,
+        }),
+      });
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Gagal membuat transaksi donasi.');
+      }
+
+      setDonation(result.donation);
+      openPayment(
+        result.donation.signature,
+        result.donation.redirectUrl || result.donation.qrisUrl
+      );
+      toast.success('Transaksi donasi dibuat. Silakan lanjutkan pembayaran.');
+      reset();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal membuat transaksi donasi.';
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <section id="donasi" className="py-16 bg-white">
       <div className="max-w-screen-2xl mx-auto px-4 lg:px-8">
         <div className="text-center mb-10">
-          <span className="text-xs font-700 uppercase tracking-widest text-pink-600 bg-pink-50 px-3 py-1 rounded-full">Donasi</span>
-          <h2 className="text-2xl lg:text-3xl font-800 text-[#1a3a5c] mt-3">Dukung Perjuangan Anti Korupsi</h2>
+          <span className="text-xs font-700 uppercase tracking-widest text-pink-600 bg-pink-50 px-3 py-1 rounded-full">
+            Donasi
+          </span>
+          <h2 className="text-2xl lg:text-3xl font-800 text-[#1a3a5c] mt-3">
+            Dukung Perjuangan Anti Korupsi
+          </h2>
           <p className="text-gray-600 mt-2 text-sm max-w-xl mx-auto">
-            Donasi Anda membantu LNAKRI NGO untuk terus beroperasi dalam menerima laporan, mendampingi korban, dan menginvestigasi korupsi di Indonesia.
+            Donasi Anda diproses melalui QRIS agar pembayaran bisa dilakukan langsung dengan dompet
+            digital atau aplikasi bank favorit Anda.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 max-w-4xl mx-auto">
-          {/* Rekening Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-10 max-w-5xl mx-auto">
           <div className="space-y-5">
             <div className="bg-gradient-to-br from-[#1a3a5c] to-[#2a5080] rounded-2xl p-6 text-white">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center font-800 text-white text-lg">
-                  {bankName.includes('BCA') ? 'BCA' : bankName.substring(0, 3).toUpperCase()}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center">
+                  <Wallet size={26} />
                 </div>
                 <div>
-                  <div className="font-700 text-lg">{bankName}</div>
-                  <div className="text-white/70 text-sm">Rekening Donasi LNAKRI NGO</div>
+                  <div className="font-700 text-lg">Dompet Digital QRIS</div>
+                  <div className="text-white/70 text-sm">Pembayaran digital aman</div>
                 </div>
               </div>
               <div className="bg-white/10 rounded-xl p-4 mb-4">
-                <div className="text-white/70 text-xs font-600 uppercase tracking-wide mb-1">Nomor Rekening</div>
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-800 tracking-widest">{bankAccountNumber}</span>
-                  <button onClick={copyRek} className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-600 transition-colors">
-                    {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                    {copied ? 'Tersalin!' : 'Salin'}
-                  </button>
+                <div className="text-white/70 text-xs font-600 uppercase tracking-wide mb-2">
+                  Metode pembayaran
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['QRIS', 'DANA', 'OVO', 'GoPay', 'ShopeePay', 'Mobile Banking'].map((method) => (
+                    <span
+                      key={method}
+                      className="bg-white/15 text-white text-xs font-600 px-3 py-1.5 rounded-full"
+                    >
+                      {method}
+                    </span>
+                  ))}
                 </div>
               </div>
               <div className="bg-white/10 rounded-xl p-4">
-                <div className="text-white/70 text-xs font-600 uppercase tracking-wide mb-1">Atas Nama</div>
-                <div className="text-lg font-700">{bankAccountName}</div>
-              </div>
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <Heart size={18} className="text-pink-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <div className="font-700 text-gray-800 text-sm mb-1">Catatan Donasi</div>
-                  <p className="text-gray-600 text-sm leading-relaxed">
-                    Setelah melakukan transfer, harap isi form konfirmasi di samping dan upload bukti transfer. Donasi Anda akan digunakan untuk operasional investigasi, bantuan hukum, dan edukasi anti korupsi.
+                <div className="flex items-start gap-3">
+                  <ShieldCheck size={20} className="text-green-300 mt-0.5 flex-shrink-0" />
+                  <p className="text-white/80 text-sm leading-relaxed">
+                    Anda akan diarahkan ke halaman pembayaran setelah nominal donasi dikirim.
+                    Nominal akhir mengikuti total tagihan yang ditampilkan.
                   </p>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Form Konfirmasi */}
-          {submitted ? (
-            <div className="flex flex-col items-center justify-center py-12 bg-green-50 rounded-2xl border border-green-200">
-              <CheckCircle size={56} className="text-green-600 mb-4" />
-              <h3 className="font-700 text-green-800 text-xl mb-2">Terima Kasih!</h3>
-              <p className="text-green-700 text-sm text-center max-w-xs">Anda telah dialihkan ke WhatsApp. Mohon kirim pesan yang telah disiapkan dan lampirkan bukti transfer Anda untuk menyelesaikan konfirmasi.</p>
-              <button onClick={() => setSubmitted(false)} className="mt-5 btn-primary text-sm">Kirim Lagi</button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <h3 className="font-700 text-[#1a3a5c] text-lg mb-4">Form Konfirmasi Donasi</h3>
-              <div>
-                <label className="label">Nama Donatur <span className="text-red-500">*</span></label>
-                <input {...register('donorName', { required: 'Nama wajib diisi' })}
-                  className="input-field" placeholder="Nama lengkap Anda" />
-                {errors.donorName && <p className="text-red-500 text-xs mt-1">{errors.donorName.message}</p>}
-              </div>
-              <div>
-                <label className="label">Email <span className="text-red-500">*</span></label>
-                <input {...register('donorEmail', { required: 'Email wajib diisi', pattern: { value: /^\S+@\S+$/i, message: 'Format email tidak valid' } })}
-                  type="email" className="input-field" placeholder="email@contoh.com" />
-                {errors.donorEmail && <p className="text-red-500 text-xs mt-1">{errors.donorEmail.message}</p>}
-              </div>
-              <div>
-                <label className="label">Jumlah Donasi (Rp) <span className="text-red-500">*</span></label>
-                <input {...register('amount', { required: 'Jumlah donasi wajib diisi' })}
-                  className="input-field" placeholder="Contoh: 500000" />
-                {errors.amount && <p className="text-red-500 text-xs mt-1">{errors.amount.message}</p>}
-              </div>
-              <div>
-                <label className="label">Keterangan Donasi</label>
-                <textarea {...register('keterangan')}
-                  className="input-field resize-none" rows={2} placeholder="Pesan atau keterangan donasi Anda..." />
-              </div>
-              <div>
-                <label className="label">Upload Bukti Transfer <span className="text-red-500">*</span></label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-red-400 transition-colors">
-                  {buktiFile ? (
-                    <div className="flex items-center gap-3">
-                      <CheckCircle size={18} className="text-green-600" />
-                      <span className="text-sm text-gray-700 flex-1">{buktiFile.name}</span>
-                      <button type="button" onClick={() => setBuktiFile(null)} className="text-gray-400 hover:text-red-500">
-                        <X size={16} />
-                      </button>
+            {donation && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle size={18} className="text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-700 text-green-800 text-sm mb-1">
+                      Transaksi Donasi Dibuat
                     </div>
-                  ) : (
-                    <label className="flex flex-col items-center gap-2 cursor-pointer">
-                      <Upload size={24} className="text-gray-400" />
-                      <span className="text-sm text-gray-500">Klik untuk upload bukti transfer</span>
-                      <span className="text-xs text-gray-400">JPG, PNG, PDF (maks. 5MB)</span>
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf"
-                        onChange={e => setBuktiFile(e.target.files?.[0] || null)} />
-                    </label>
-                  )}
+                    <p className="text-green-700 text-sm leading-relaxed">
+                      Order {donation.orderId} menunggu pembayaran
+                      {donation.totalAmount ? ` sebesar ${formatRupiah(donation.totalAmount)}` : ''}
+                      .
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openPayment(
+                          donation.signature,
+                          donation.redirectUrl || donation.qrisUrl || undefined
+                        )
+                      }
+                      className="mt-3 btn-secondary text-xs px-4 py-2"
+                    >
+                      <QrCode size={14} /> Buka Pembayaran Lagi
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button type="submit" disabled={submitting}
-                className="w-full btn-primary justify-center py-3 disabled:opacity-60 disabled:cursor-not-allowed">
-                {submitting ? (
-                  <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Mengirim...</>
-                ) : (
-                  <><Heart size={16} /> Kirim Konfirmasi Donasi</>
-                )}
-              </button>
-            </form>
-          )}
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <h3 className="font-700 text-[#1a3a5c] text-lg mb-4">Form Donasi Digital</h3>
+            <div>
+              <label className="label">
+                Nama Donatur <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('donorName', { required: 'Nama wajib diisi' })}
+                className="input-field"
+                placeholder="Nama lengkap Anda"
+              />
+              {errors.donorName && (
+                <p className="text-red-500 text-xs mt-1">{errors.donorName.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="label">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('donorEmail', {
+                  required: 'Email wajib diisi',
+                  pattern: { value: /^\S+@\S+$/i, message: 'Format email tidak valid' },
+                })}
+                type="email"
+                className="input-field"
+                placeholder="email@contoh.com"
+              />
+              {errors.donorEmail && (
+                <p className="text-red-500 text-xs mt-1">{errors.donorEmail.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="label">
+                Jumlah Donasi (Rp) <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                {quickAmounts.map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => setValue('amount', String(amount), { shouldValidate: true })}
+                    className={`rounded-lg border px-3 py-2 text-xs font-700 transition-colors ${
+                      Number(selectedAmount) === amount
+                        ? 'border-red-700 bg-red-50 text-red-700'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-red-300'
+                    }`}
+                  >
+                    {formatRupiah(amount)}
+                  </button>
+                ))}
+              </div>
+              <input
+                {...register('amount', {
+                  required: 'Jumlah donasi wajib diisi',
+                  min: { value: 1000, message: 'Minimal donasi Rp 1.000' },
+                  pattern: { value: /^[0-9]+$/, message: 'Nominal hanya boleh angka' },
+                })}
+                inputMode="numeric"
+                className="input-field"
+                placeholder="Contoh: 500000"
+              />
+              {errors.amount && (
+                <p className="text-red-500 text-xs mt-1">{errors.amount.message}</p>
+              )}
+            </div>
+            <div>
+              <label className="label">Keterangan Donasi</label>
+              <textarea
+                {...register('keterangan')}
+                className="input-field resize-none"
+                rows={3}
+                placeholder="Pesan atau keterangan donasi Anda..."
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full btn-primary justify-center py-3 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="animate-spin" size={16} /> Membuat Pembayaran...
+                </>
+              ) : (
+                <>
+                  <Heart size={16} /> Donasi Sekarang
+                </>
+              )}
+            </button>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Setelah tombol ditekan, sistem membuat tagihan QRIS baru dan membuka halaman
+              pembayaran secara otomatis.
+            </p>
+          </form>
         </div>
       </div>
     </section>
