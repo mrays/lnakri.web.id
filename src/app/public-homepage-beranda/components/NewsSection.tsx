@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 
 import AppImage from '@/components/ui/AppImage';
-import { Calendar, User, Clock, ChevronRight } from 'lucide-react';
+import { Calendar, User, Clock, ChevronRight, Check, Copy, MessageCircle, Share2 } from 'lucide-react';
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl, isYouTubeUrl } from '@/lib/news-media';
 
 const categoryColors: Record<string, string> = {
@@ -53,13 +53,81 @@ function VideoBadge() {
   );
 }
 
+function getNewsShareLinks(news: any, pageUrl: string) {
+  const title = news?.title || 'Berita LNAKRI';
+  const shareText = `${title} - LNAKRI`;
+  const encodedUrl = encodeURIComponent(pageUrl);
+  const encodedText = encodeURIComponent(shareText);
+
+  return [
+    {
+      label: 'WhatsApp',
+      href: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${pageUrl}`)}`,
+      className: 'border-green-200 text-green-700 hover:border-green-300 hover:bg-green-50',
+      icon: <MessageCircle size={15} />,
+    },
+    {
+      label: 'Facebook',
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      className: 'border-blue-200 text-blue-700 hover:border-blue-300 hover:bg-blue-50',
+      icon: <span className="text-sm font-800 leading-none">f</span>,
+    },
+    {
+      label: 'Twitter',
+      href: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+      className: 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50',
+      icon: <span className="text-xs font-800 leading-none">X</span>,
+    },
+  ];
+}
+
+function getFullNewsCopyText(news: any, pageUrl: string) {
+  const publishedAt = [news?.date, news?.time].filter(Boolean).join(' ');
+  const content = [news?.excerpt, news?.content].filter(Boolean).join('\n\n');
+
+  return [
+    news?.title,
+    '',
+    `Kategori: ${news?.category || '-'}`,
+    `Penulis: ${news?.author || 'Redaksi LNAKRI'}`,
+    `Tanggal: ${publishedAt || '-'}`,
+    '',
+    content,
+    '',
+    'Sumber lengkap:',
+    'LNAKRI NGO - Lembaga Nasional Anti Korupsi RI',
+    pageUrl,
+  ]
+    .filter((line) => line !== undefined && line !== null)
+    .join('\n');
+}
+
+async function copyTextToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', '');
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+  }
+}
+
 export default function NewsSection() {
   const [newsList, setNewsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNews, setSelectedNews] = useState<any | null>(null);
+  const [pageUrl, setPageUrl] = useState('');
+  const [copiedNewsId, setCopiedNewsId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchNews();
+    setPageUrl(`${window.location.origin}${window.location.pathname}#berita`);
   }, []);
 
   const fetchNews = async () => {
@@ -80,6 +148,15 @@ export default function NewsSection() {
   const featuredNews = newsList[0];
   const sideNews = newsList.slice(1, 4);
   const bottomNews = newsList.slice(4);
+  const selectedShareLinks = selectedNews ? getNewsShareLinks(selectedNews, pageUrl) : [];
+
+  const handleCopyFullNews = async () => {
+    if (!selectedNews) return;
+
+    await copyTextToClipboard(getFullNewsCopyText(selectedNews, pageUrl));
+    setCopiedNewsId(selectedNews.id);
+    window.setTimeout(() => setCopiedNewsId(null), 2000);
+  };
 
   return (
     <section id="berita" className="py-16 bg-white">
@@ -241,6 +318,33 @@ export default function NewsSection() {
                 <span className="flex items-center gap-1.5"><User size={14} className="text-red-700" />{selectedNews.author}</span>
                 <span className="flex items-center gap-1.5"><Calendar size={14} className="text-red-700" />{selectedNews.date}</span>
                 <span className="flex items-center gap-1.5"><Clock size={14} className="text-red-700" />{selectedNews.time}</span>
+              </div>
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <span className="mr-1 flex items-center gap-1.5 text-sm font-700 text-[#1a3a5c]">
+                  <Share2 size={15} className="text-red-700" />
+                  Bagikan
+                </span>
+                {selectedShareLinks.map((link) => (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Bagikan berita ke ${link.label}`}
+                    className={`inline-flex h-9 items-center gap-2 rounded-full border bg-white px-3 text-sm font-700 transition-colors ${link.className}`}
+                  >
+                    {link.icon}
+                    {link.label}
+                  </a>
+                ))}
+                <button
+                  type="button"
+                  onClick={handleCopyFullNews}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 text-sm font-700 text-red-700 transition-colors hover:border-red-300 hover:bg-red-100"
+                >
+                  {copiedNewsId === selectedNews.id ? <Check size={15} /> : <Copy size={15} />}
+                  {copiedNewsId === selectedNews.id ? 'Tersalin' : 'Salin Lengkap'}
+                </button>
               </div>
               <p className="text-gray-700 leading-relaxed text-base break-words whitespace-pre-wrap">{selectedNews.excerpt}</p>
               <p className="text-gray-700 leading-relaxed text-base mt-4 break-words whitespace-pre-wrap">{selectedNews.content}</p>
